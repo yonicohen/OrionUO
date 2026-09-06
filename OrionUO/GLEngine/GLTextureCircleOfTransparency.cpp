@@ -64,6 +64,16 @@ bool CGLTextureCircleOfTransparency::Create(int radius)
     if (radius == Radius)
         return true;
 
+#if !USE_WISP
+    // Reachable from a global constructor (CConfigManager), i.e. before main()
+    // and before any GL context exists. Windows' opengl32 quietly ignores GL
+    // calls made with no current context; macOS' libGL dereferences a null
+    // context and segfaults. Bail out without touching Radius so the render
+    // loop creates the texture once a context is actually current.
+    if (SDL_GL_GetCurrentContext() == nullptr)
+        return false;
+#endif
+
     UINT_LIST pixels;
 
     CreatePixels(radius, Width, Height, pixels);

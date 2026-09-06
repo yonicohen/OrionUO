@@ -253,6 +253,14 @@ string CDataReader::ReadString(size_t size, const intptr_t &offset)
     {
         result.resize(size, 0);
         ReadDataLE((puchar)&result[0], size, offset);
+
+        // Fixed-width text fields on the wire are NUL padded. Without trimming,
+        // an empty 30-byte character name came back as a 30-character string of
+        // NULs - non-empty to every "is this slot used?" test in the client, but
+        // printing as nothing - so empty slots looked like real characters.
+        const size_t terminator = result.find('\0');
+        if (terminator != string::npos)
+            result.resize(terminator);
     }
 
     return result;

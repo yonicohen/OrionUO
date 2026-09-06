@@ -52,10 +52,9 @@ void CWindow::SetSize(const WISP_GEOMETRY::CSize &size)
 
     SetWindowPos(Handle, HWND_TOP, pos.left, pos.top, r.right, r.bottom, 0);
 #else
-    // SDL_GetWindowPosition
-    // SDL_GetWindowSize
-    // SDL_SetWindowPosition
-    NOT_IMPLEMENTED;
+    // SDL sizes windows by client area, so there is no frame to account for.
+    if (m_window != nullptr)
+        SDL_SetWindowSize(m_window, size.Width, size.Height);
 #endif
     m_Size = size;
 }
@@ -215,12 +214,38 @@ bool CWindow::Create(
 
     m_Size.Width = width;
     m_Size.Height = height;
-    m_window = SDL_CreateWindow(title, 0, 0, width, height, SDL_WINDOW_OPENGL);
+
+    // These must be set before the window is created. macOS in particular hands
+    // back a context matching whatever was requested at window-creation time, so
+    // setting them afterwards silently leaves you without a usable context.
+    // The renderer is fixed-function GL 2.x (it even uses display lists), so ask
+    // for the legacy/compatibility profile rather than core.
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+
+    m_window = SDL_CreateWindow(
+        title,
+        SDL_WINDOWPOS_CENTERED,
+        SDL_WINDOWPOS_CENTERED,
+        width,
+        height,
+        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     if (!m_window)
     {
         SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Coult not create window: %s\n", SDL_GetError());
         return false;
     }
+
+    // The UI is laid out for 640x480 upwards; smaller clips the game window.
+    SDL_SetWindowMinimumSize(m_window, 640, 480);
+
+    SetStubWindow(m_window);
+
+    // Without this SDL delivers no SDL_TEXTINPUT events at all, so every text
+    // field in the client silently ignores typing. It is not implicitly enabled:
+    // SDL3 (which sdl2-compat sits on) requires it per window.
+    SDL_StartTextInput();
 
     SDL_SysWMinfo info;
     SDL_VERSION(&info.version);
@@ -667,7 +692,6 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
 {
     switch (ev.type)
     {
-        case SDL_WINDOWEVENT_CLOSE:
         case SDL_QUIT:
         {
             OnDestroy();
@@ -675,17 +699,48 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
             break;
         }
 
-        case SDL_WINDOWEVENT_SHOWN:
+        // SDL_WINDOWEVENT_* are subtypes carried in ev.window.event, not event
+        // types. They used to be matched against ev.type directly, so none of
+        // them ever fired: show/hide never reached the plugin or the sound and
+        // FPS handling, and resizes were not noticed at all.
+        case SDL_WINDOWEVENT:
         {
-            OnShow(true); // Plugin
-            OnActivate(); // Sound + FPS
-        }
-        break;
+            switch (ev.window.event)
+            {
+                case SDL_WINDOWEVENT_CLOSE:
+                {
+                    OnDestroy();
+                    return true;
+                }
 
-        case SDL_WINDOWEVENT_HIDDEN:
-        {
-            OnShow(false);  // Plugin
-            OnDeactivate(); // Sound + FPS
+                case SDL_WINDOWEVENT_SHOWN:
+                case SDL_WINDOWEVENT_FOCUS_GAINED:
+                {
+                    OnShow(true); // Plugin
+                    OnActivate(); // Sound + FPS
+                }
+                break;
+
+                case SDL_WINDOWEVENT_HIDDEN:
+                case SDL_WINDOWEVENT_FOCUS_LOST:
+                {
+                    OnShow(false);  // Plugin
+                    OnDeactivate(); // Sound + FPS
+                }
+                break;
+
+                case SDL_WINDOWEVENT_RESIZED:
+                case SDL_WINDOWEVENT_SIZE_CHANGED:
+                {
+                    m_Size.Width = ev.window.data1;
+                    m_Size.Height = ev.window.data2;
+                    OnResize(m_Size);
+                }
+                break;
+
+                default:
+                    break;
+            }
         }
         break;
 
@@ -694,6 +749,12 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
             //case WM_SIZE:
             // WISP_THREADED_TIMER::CThreadedTimer::MessageID:
             //case WM_TIMER:
+
+        case SDL_USEREVENT:
+        {
+            OnTimer((uint)ev.user.code);
+        }
+        break;
 
         case SDL_KEYDOWN:
         {
@@ -741,7 +802,14 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
             switch (mouse.button)
             {
                 case SDL_BUTTON_LEFT:
-                    WISP_MOUSE::g_WispMouse->LeftButtonPressed = isDown;
+                    // Only set it here for the press. On release it must stay
+                    // true until after OnLeftMouseButtonUp(), because
+                    // LeftDroppedOffset() returns (0,0) when the button reads as
+                    // up - which made every gump drag move by zero pixels. The
+                    // Win32 path clears it after the callback for this reason.
+                    if (isDown)
+                        WISP_MOUSE::g_WispMouse->LeftButtonPressed = true;
+
                     if (isDown)
                     {
                         WISP_MOUSE::g_WispMouse->Capture();
@@ -773,6 +841,8 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
                     {
                         if (WISP_MOUSE::g_WispMouse->LastLeftButtonClickTimer != 0xFFFFFFFF)
                             OnLeftMouseButtonUp();
+
+                        WISP_MOUSE::g_WispMouse->LeftButtonPressed = false;
                         WISP_MOUSE::g_WispMouse->Release();
                     }
                     break;

@@ -3313,7 +3313,6 @@ void CGumpOptions::GUMP_COMBOBOX_SELECTION_EVENT_C
     }
 }
 //----------------------------------------------------------------------------
-#if USE_WISP
 void CGumpOptions::OnCharPress(const WPARAM &wParam, const LPARAM &lParam)
 {
     WISPFUN_DEBUG("c104_f24");
@@ -3477,14 +3476,19 @@ void CGumpOptions::OnKeyDown(const WPARAM &wParam, const LPARAM &lParam)
         }
     }
 }
-#else
+#if !USE_WISP
 void CGumpOptions::OnTextInput(const SDL_TextInputEvent &ev)
 {
-    NOT_IMPLEMENTED; // FIXME
+    // Adapter onto the platform-neutral handler above. VK_* are SDL keycodes
+    // on this platform, so that switch works verbatim.
+    for (const wchar_t ch : DecodeUTF8(ev.text))
+        OnCharPress((WPARAM)ch, 0);
 }
 void CGumpOptions::OnKeyDown(const SDL_KeyboardEvent &ev)
 {
-    NOT_IMPLEMENTED; // FIXME
+    // Adapter onto the platform-neutral handler above. VK_* are SDL keycodes
+    // on this platform, so that switch works verbatim.
+    OnKeyDown((WPARAM)ev.keysym.sym, 0);
 }
 #endif
 //----------------------------------------------------------------------------

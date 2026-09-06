@@ -13,6 +13,20 @@
 //----------------------------------------------------------------------------------
 CFontsManager g_FontManager;
 //----------------------------------------------------------------------------------
+namespace
+{
+// The unicode font tables hold one offset per UTF-16 code unit, so the index
+// must stay below 0x10000. wchar_t is 16-bit on Windows and can never exceed
+// that; on macOS and Linux it is 32-bit, so any character outside the BMP
+// indexed far past the end of the table and crashed. Characters we cannot
+// represent are reported as absent.
+inline uint UnicodeFontOffset(puint table, wchar_t c)
+{
+    const uint index = (uint)c;
+    return (index < 0x10000) ? table[index] : 0;
+}
+} // namespace
+//----------------------------------------------------------------------------------
 CFontsManager::CFontsManager()
 {
     WISPFUN_DEBUG("c143_f1");
@@ -1021,7 +1035,7 @@ WISP_GEOMETRY::CPoint2Di CFontsManager::GetCaretPosW(
             {
                 //collect data about width of each character
                 const wchar_t &ch = info->Data[i].item;
-                uint offset = table[ch];
+                uint offset = UnicodeFontOffset(table, ch);
 
                 if (offset && offset != 0xFFFFFFFF)
                 {
@@ -1100,7 +1114,7 @@ int CFontsManager::CalculateCaretPosW(
                 IFOR (i, 0, len)
                 {
                     const wchar_t &ch = info->Data[i].item;
-                    int offset = table[ch];
+                    int offset = (int)UnicodeFontOffset(table, ch);
 
                     if (offset && offset != 0xFFFFFFFF)
                     {
@@ -1158,7 +1172,7 @@ int CFontsManager::GetWidthW(uchar font, const wstring &str)
 
     for (const wchar_t &c : str)
     {
-        uint &offset = table[c];
+        const uint offset = UnicodeFontOffset(table, c);
 
         if (offset && offset != 0xFFFFFFFF)
         {
@@ -1309,7 +1323,7 @@ wstring CFontsManager::GetTextByWidthW(uchar font, const wstring &str, int width
 
     for (const wchar_t &c : str)
     {
-        uint offset = table[c];
+        uint offset = UnicodeFontOffset(table, c);
         char charWidth = 0;
 
         if (offset && offset != 0xFFFFFFFF)
@@ -1977,10 +1991,10 @@ PMULTILINES_FONT_INFO CFontsManager::GetInfoHTML(
                 si = L'\n';
         }
 
-        if ((!table[si] || table[si] == 0xFFFFFFFF) && si != L' ' && si != L'\n')
+        if ((!UnicodeFontOffset(table, si) || UnicodeFontOffset(table, si) == 0xFFFFFFFF) && si != L' ' && si != L'\n')
             continue;
 
-        puchar data = (puchar)((size_t)table + table[si]);
+        puchar data = (puchar)((size_t)table + UnicodeFontOffset(table, si));
 
         if (si == L' ')
         {
@@ -2221,10 +2235,10 @@ PMULTILINES_FONT_INFO CFontsManager::GetInfoW(
                 si = L'\n';
         }
 
-        if ((!table[si] || table[si] == 0xFFFFFFFF) && si != L' ' && si != L'\n')
+        if ((!UnicodeFontOffset(table, si) || UnicodeFontOffset(table, si) == 0xFFFFFFFF) && si != L' ' && si != L'\n')
             continue;
 
-        puchar data = (puchar)((size_t)table + table[si]);
+        puchar data = (puchar)((size_t)table + UnicodeFontOffset(table, si));
 
         if (si == L' ')
         {
@@ -2626,12 +2640,12 @@ UINT_LIST CFontsManager::GeneratePixelsW(
 
                 if (si == L' ')
                     ofsX = UNICODE_SPACE_WIDTH;
-                else if ((!table[si] || table[si] == 0xFFFFFFFF) && si != L' ')
+                else if ((!UnicodeFontOffset(table, si) || UnicodeFontOffset(table, si) == 0xFFFFFFFF) && si != L' ')
                 {
                 }
                 else
                 {
-                    puchar xData = (puchar)((size_t)table + table[si]);
+                    puchar xData = (puchar)((size_t)table + UnicodeFontOffset(table, si));
                     ofsX = (char)xData[2];
                 }
 
@@ -2646,10 +2660,10 @@ UINT_LIST CFontsManager::GeneratePixelsW(
 			si = ptr->Data[i].item;
 			}*/
 
-            if ((!table[si] || table[si] == 0xFFFFFFFF) && si != L' ')
+            if ((!UnicodeFontOffset(table, si) || UnicodeFontOffset(table, si) == 0xFFFFFFFF) && si != L' ')
                 continue;
 
-            puchar data = (puchar)((size_t)table + table[si]);
+            puchar data = (puchar)((size_t)table + UnicodeFontOffset(table, si));
 
             int offsX = 0;
             int offsY = 0;

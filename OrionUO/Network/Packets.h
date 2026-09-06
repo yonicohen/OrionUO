@@ -603,5 +603,14 @@ public:
     CPacketOrionVersion(int version);
 };
 //----------------------------------------------------------------------------------
+// Current Orion answers the version query under 0xBF subcommand 0xFACE rather
+// than packet 0xFC. Servers using the stock Orion-exclusive script disconnect
+// clients that do not reply.
+class CPacketOrionVersionFace : public CPacket
+{
+public:
+    CPacketOrionVersionFace();
+};
+//----------------------------------------------------------------------------------
 #endif
 //----------------------------------------------------------------------------------

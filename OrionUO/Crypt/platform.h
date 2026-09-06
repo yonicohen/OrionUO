@@ -51,12 +51,18 @@
 #endif
 #endif
 
-#ifdef _M_IX86
+/* _M_IX86 is MSVC-on-x86 only. Under clang/gcc - including Apple Silicon - it is
+   never defined, so this fell through to the big-endian branch on little-endian
+   CPUs: Bswap() byte-swapped every word, ADDR_XOR reversed byte extraction, and
+   ALIGN32 changed the key/cipher struct layouts. Twofish then produced garbage.
+   Ask the compiler instead of guessing from the CPU macro. */
+#if defined(_M_IX86) || defined(_M_X64) || defined(__i386__) || defined(__x86_64__) ||             \
+    (defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__))
 #define LittleEndian 1 /* e.g., 1 for Pentium, 0 for 68K */
 #define ALIGN32 0      /* need dword alignment? (no for Pentium) */
-#else                  /* non-Intel platforms */
-#define LittleEndian 0 /* (assume big endian */
-#define ALIGN32 1      /* (assume need alignment for non-Intel) */
+#else                  /* big-endian platforms */
+#define LittleEndian 0
+#define ALIGN32 1
 #endif
 
 #if LittleEndian

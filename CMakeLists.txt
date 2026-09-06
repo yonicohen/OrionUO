@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required(VERSION 3.16)
 find_program(CMAKE_C_COMPILER NAMES $ENV{CC} clang PATHS ENV PATH NO_DEFAULT_PATH)
 find_program(CMAKE_CXX_COMPILER NAMES $ENV{CXX} clang++ PATHS ENV PATH NO_DEFAULT_PATH)
 
@@ -11,6 +11,10 @@ option(ENABLE_LTO "Enables Link Time Optimization" OFF)
 option(ORION_BUILD_MODULES "Enables Modular Project Structure" OFF)
 option(ORION_DLL_STATIC "Use Builtin Orion Crypto Library (Windows option)" ON)
 option(ORION_WISP "Use WISP pure Win32 API Implementation (Windows option)" ON)
+# cotire is unmaintained and its stale-prefix-header detection breaks on every
+# header edit. CMake has had native precompiled headers since 3.16, so use those
+# by default and keep cotire behind an opt-in for the legacy unity build.
+option(ORION_USE_COTIRE "Use cotire for precompiled/unity builds (legacy)" OFF)
 
 list(APPEND CMAKE_MODULE_PATH
   ${CMAKE_SOURCE_DIR}/CMake
@@ -84,8 +88,21 @@ else()
 	find_package(ZLIB REQUIRED)
 	find_package(SDL2 REQUIRED)
 	find_package(SDL2_image REQUIRED)
+	find_package(SDL2_mixer REQUIRED)
+	# The bundled FindSDL2_mixer module predates find_package_handle_standard_args:
+	# it sets SDL2MIXER_* and never fails, so check it and normalise the names.
+	if(NOT SDL2MIXER_FOUND)
+		message(FATAL_ERROR "SDL2_mixer not found (needed for audio)")
+	endif()
+	set(SDL2_MIXER_LIBRARIES ${SDL2MIXER_LIBRARY})
+	set(SDL2_MIXER_INCLUDE_DIRS ${SDL2MIXER_INCLUDE_DIR})
 	find_package(FreeImage REQUIRED)
 	find_package(GLEW REQUIRED)
+	# Modern glew ships a config-module exporting only the GLEW::GLEW target,
+	# leaving the legacy GLEW_LIBRARIES/GLEW_LIBRARY variables unset.
+	if(TARGET GLEW::GLEW)
+		set(GLEW_LIBRARIES GLEW::GLEW)
+	endif()
 	# Set the preferred opengl library to GLVND if there is GLVND and Legacy.
 	# Only if there is no GLVND Legacy will be used.
 	# The that is the default with cmake-3.11. Legacy is deprecated.
@@ -99,6 +116,7 @@ include_directories(${OPENGL_INCLUDE_DIR})
 include_directories(${ZLIB_INCLUDE_DIRS})
 include_directories(${SDL2_INCLUDE_DIRS})
 include_directories(${SDL2_IMAGE_INCLUDE_DIR})
+include_directories(${SDL2_MIXER_INCLUDE_DIRS})
 include_directories(${FREEIMAGE_INCLUDE_DIR})
 include_directories(${GLEW_INCLUDE_DIR})
 #

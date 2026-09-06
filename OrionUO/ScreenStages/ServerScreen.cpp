@@ -39,7 +39,6 @@ void CServerScreen::Init()
     m_Gump.WantUpdateContent = true;
 }
 //----------------------------------------------------------------------------------
-#if USE_WISP
 /*!
 Обработка нажатия клавиши
 @param [__in] wparam не подписанный параметр
@@ -57,10 +56,12 @@ void CServerScreen::OnKeyDown(const WPARAM &wParam, const LPARAM &lParam)
         CreateSmoothAction(ID_SMOOTH_SS_SELECT_SERVER);
     }
 }
-#else
+#if !USE_WISP
 void CServerScreen::OnKeyDown(const SDL_KeyboardEvent &ev)
 {
-    NOT_IMPLEMENTED; // FIXME
+    // Adapter onto the platform-neutral handler above. VK_* are SDL keycodes
+    // on this platform, so that switch works verbatim.
+    OnKeyDown((WPARAM)ev.keysym.sym, 0);
 }
 #endif
 //----------------------------------------------------------------------------------

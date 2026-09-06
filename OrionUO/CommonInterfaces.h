@@ -8,7 +8,7 @@
 */
 #pragma once
 //----------------------------------------------------------------------------------
-#if defined(ORION_LINUX)
+#if defined(ORION_POSIX)
 #include "stdafx.h"
 #include <stdint.h>
 #define CDECL

@@ -17,7 +17,7 @@
 #include "FileSystem.h"
 #include "Crypt/CryptEntry.h"
 
-#if defined(ORION_LINUX)
+#if defined(ORION_POSIX)
 #define CDECL
 #endif
 
@@ -169,6 +169,21 @@ void COrion::ParseCommandLine() // FIXME: move this out
                     defaultPluginFunction = strings[3];
                 }
             }
+        }
+
+        else if (str == "orionversion" && haveParam)
+        {
+            // -orionversion a.b.c.d - overrides the version reported to the
+            // server so a shard's required build can be matched without a
+            // rebuild. The tokeniser above splits on " ,:" so the dotted
+            // string arrives intact in strings[1].
+            int a = 0, b = 0, c = 0, d = 0;
+            sscanf(strings[1].c_str(), "%d.%d.%d.%d", &a, &b, &c, &d);
+
+            OrionVersionNumeric = ((a & 0xFF) << 24) | ((b & 0xFF) << 16) |
+                                  ((c & 0xFF) << 8) | (d & 0xFF);
+            LOG("Orion version overridden to %d.%d.%d.%d (0x%08X)\n",
+                a, b, c, d, OrionVersionNumeric);
         }
         else if (str == "autologin")
         {
@@ -1293,10 +1308,33 @@ void COrion::Process(bool rendering)
 
     g_MouseManager.Update();
 
+    if (m_OrionAnnounceRepeats > 0 && g_ConnectionManager.Connected() &&
+        m_OrionAnnounceNext <= g_Ticks)
+    {
+        m_OrionAnnounceRepeats--;
+        m_OrionAnnounceNext = g_Ticks + 900;
+
+        CPacketOrionVersionFace().Send();
+    }
+
     if (g_GameState >= GS_CHARACTER && (g_LastSendTime + SEND_TIMEOUT_DELAY) < g_Ticks)
     {
-        uchar ping[2] = { 0x73, 0 };
-        Send(ping, 2);
+        if (g_ConnectionManager.Connected())
+        {
+            uchar ping[2] = { 0x73, 0 };
+            Send(ping, 2);
+        }
+        else
+        {
+            // g_LastSendTime only advances on a successful send, so without this
+            // a closed socket left the client spinning on this branch forever.
+            static bool reported = false;
+            if (!reported)
+            {
+                reported = true;
+                LOG("Connection lost while in game state %d\n", (int)g_GameState);
+            }
+        }
     }
 
     bool oldCtrl = g_CtrlPressed;
@@ -1910,6 +1948,7 @@ void COrion::Connect()
     int port;
 
     LoadLogin(login, port);
+    m_LoginServerHost = login;
 
     if (g_ConnectionManager.Connect(login, port, g_GameSeed))
     {
@@ -1944,7 +1983,6 @@ int COrion::Send(puchar buf, int size)
 
     if (type.save)
     {
-#if !defined(ORION_LINUX) // FIXME: localtime_s (use C++ if possible)
         time_t rawtime;
         struct tm timeinfo;
         char buffer[80];
@@ -1958,7 +1996,6 @@ int COrion::Send(puchar buf, int size)
             g_TotalSendSize,
             buffer,
             type.Name);
-#endif
 
         if (*buf == 0x80 || *buf == 0x91)
         {
@@ -2008,11 +2045,44 @@ void COrion::ServerSelection(int pos)
     }
 }
 //----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+// True for loopback and the RFC1918 ranges, i.e. addresses that cannot be reached
+// from outside the server's own network.
+static bool IsPrivateAddress(const char *ip)
+{
+    if (ip == nullptr)
+        return false;
+
+    in_addr addr;
+    if (inet_pton(AF_INET, ip, &addr) != 1)
+        return false;
+
+    const uint host = ntohl(addr.s_addr);
+    return (host >> 24) == 10 || (host >> 24) == 127 || (host >> 20) == 0xAC1 ||
+           (host >> 16) == 0xC0A8;
+}
+//----------------------------------------------------------------------------------
 void COrion::RelayServer(const char *ip, int port, puchar gameSeed)
 {
     WISPFUN_DEBUG("c194_f26");
     memcpy(&g_GameSeed[0], &gameSeed[0], 4);
     g_ConnectionManager.Init(gameSeed);
+
+    // Shards behind NAT commonly relay to their own LAN address, which is
+    // unroutable for us. Every practical client works around this by staying on
+    // the host we successfully logged in to.
+    // DefaultLogin is only set by the command line; when the server came from
+    // login.cfg the host we actually reached is in m_LoginServerHost.
+    const string &loginHost = !m_LoginServerHost.empty() ? m_LoginServerHost : DefaultLogin;
+
+    string host = ip;
+    if (!loginHost.empty() && IsPrivateAddress(ip))
+    {
+        LOG("Relay address %s is not routable; staying on %s\n", ip, loginHost.c_str());
+        host = loginHost;
+    }
+    ip = host.c_str();
+
     m_GameServerIP = ip;
     memset(&g_GameServerPingInfo, 0, sizeof(g_GameServerPingInfo));
 
@@ -2043,6 +2113,16 @@ void COrion::CharacterSelection(int pos)
         (WPARAM)g_CharacterList.LastCharacterName.c_str(),
         0);
 
+    // Logging in to an empty slot makes the server reject us with reason 4 and
+    // drop the connection, which then silently breaks character creation. Both
+    // callers are supposed to check this; enforce it here so nothing can send it.
+    if (g_CharacterList.LastCharacterName.empty())
+    {
+        LOG("Refusing to select an empty character slot; going to creation\n");
+        InitScreen(GS_PROFESSION_SELECT);
+        return;
+    }
+
     CPacketSelectCharacter(pos, g_CharacterList.LastCharacterName).Send();
 }
 //----------------------------------------------------------------------------------
@@ -2055,6 +2135,20 @@ void COrion::LoginComplete(bool reload)
     {
         load = true;
         g_ConnectionScreen.SetCompleted(true);
+
+        // Announce the Orion version without waiting to be asked. This shard
+        // never sends the OCT_ORION_VERSION request, but disconnects a few
+        // seconds into the world with "This server requires the latest ORION
+        // version" if it has not been told.
+        LOG("Announcing Orion version 0x%08X\n", OrionVersionNumeric);
+        CPacketOrionVersion(OrionVersionNumeric).Send();
+
+        // The shard clears its kick flag via uid.<LOCAL.CHAR>, and Sphere only
+        // populates LOCAL.CHAR once m_pChar exists. Repeat the announcement
+        // across the window before its 5s timer fires, so a reply that lands
+        // fractionally too early is not the reason it never takes.
+        m_OrionAnnounceRepeats = 5;
+        m_OrionAnnounceNext = g_Ticks;
 
         InitScreen(GS_GAME);
     }
@@ -2419,6 +2513,17 @@ ushort COrion::GetDesolationGraphic(ushort graphic)
     }
 
     return graphic;
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+// The plugin ABI exposes raw mapped-file addresses through an int-wide value.
+// That only ever worked on 32-bit builds; on 64-bit the address does not fit, so
+// return 0 rather than a truncated pointer that a plugin would try to dereference.
+static int AddressToPluginValue(const void *ptr)
+{
+    if (sizeof(void *) > sizeof(int))
+        return 0;
+    return (int)(intptr_t)ptr;
 }
 //----------------------------------------------------------------------------------
 int COrion::ValueInt(const VALUE_KEY_INT &key, int value)
@@ -2947,7 +3052,7 @@ int COrion::ValueInt(const VALUE_KEY_INT &key, int value)
         case VKI_MAP_MUL_ADDRESS:
         {
             if (value >= 0 && value < 6)
-                value = (int)g_FileManager.m_MapMul[value].Start;
+                value = AddressToPluginValue(g_FileManager.m_MapMul[value].Start);
 
             break;
         }
@@ -2961,7 +3066,7 @@ int COrion::ValueInt(const VALUE_KEY_INT &key, int value)
         case VKI_STATIC_IDX_ADDRESS:
         {
             if (value >= 0 && value < 6)
-                value = (int)g_FileManager.m_StaticIdx[value].Start;
+                value = AddressToPluginValue(g_FileManager.m_StaticIdx[value].Start);
 
             break;
         }
@@ -2975,7 +3080,7 @@ int COrion::ValueInt(const VALUE_KEY_INT &key, int value)
         case VKI_STATIC_MUL_ADDRESS:
         {
             if (value >= 0 && value < 6)
-                value = (int)g_FileManager.m_StaticMul[value].Start;
+                value = AddressToPluginValue(g_FileManager.m_StaticMul[value].Start);
 
             break;
         }
@@ -2989,7 +3094,7 @@ int COrion::ValueInt(const VALUE_KEY_INT &key, int value)
         case VKI_MAP_DIFL_ADDRESS:
         {
             if (value >= 0 && value < 6)
-                value = (int)g_FileManager.m_MapDifl[value].Start;
+                value = AddressToPluginValue(g_FileManager.m_MapDifl[value].Start);
 
             break;
         }
@@ -3003,7 +3108,7 @@ int COrion::ValueInt(const VALUE_KEY_INT &key, int value)
         case VKI_MAP_DIF_ADDRESS:
         {
             if (value >= 0 && value < 6)
-                value = (int)g_FileManager.m_MapDif[value].Start;
+                value = AddressToPluginValue(g_FileManager.m_MapDif[value].Start);
 
             break;
         }
@@ -3017,7 +3122,7 @@ int COrion::ValueInt(const VALUE_KEY_INT &key, int value)
         case VKI_STATIC_DIFL_ADDRESS:
         {
             if (value >= 0 && value < 6)
-                value = (int)g_FileManager.m_StaDifl[value].Start;
+                value = AddressToPluginValue(g_FileManager.m_StaDifl[value].Start);
 
             break;
         }
@@ -3031,7 +3136,7 @@ int COrion::ValueInt(const VALUE_KEY_INT &key, int value)
         case VKI_STATIC_DIFI_ADDRESS:
         {
             if (value >= 0 && value < 6)
-                value = (int)g_FileManager.m_StaDifi[value].Start;
+                value = AddressToPluginValue(g_FileManager.m_StaDifi[value].Start);
 
             break;
         }
@@ -3045,7 +3150,7 @@ int COrion::ValueInt(const VALUE_KEY_INT &key, int value)
         case VKI_STATIC_DIF_ADDRESS:
         {
             if (value >= 0 && value < 6)
-                value = (int)g_FileManager.m_StaDif[value].Start;
+                value = AddressToPluginValue(g_FileManager.m_StaDif[value].Start);
 
             break;
         }
@@ -3058,7 +3163,7 @@ int COrion::ValueInt(const VALUE_KEY_INT &key, int value)
         }
         case VKI_VERDATA_ADDRESS:
         {
-            value = (int)g_FileManager.m_VerdataMul.Start;
+            value = AddressToPluginValue(g_FileManager.m_VerdataMul.Start);
 
             break;
         }
@@ -3071,7 +3176,7 @@ int COrion::ValueInt(const VALUE_KEY_INT &key, int value)
         case VKI_MAP_UOP_ADDRESS:
         {
             if (value >= 0 && value < 6)
-                value = (int)g_FileManager.m_MapUOP[value].Start;
+                value = AddressToPluginValue(g_FileManager.m_MapUOP[value].Start);
 
             break;
         }
@@ -3085,7 +3190,7 @@ int COrion::ValueInt(const VALUE_KEY_INT &key, int value)
         case VKI_MAP_X_UOP_ADDRESS:
         {
             if (value >= 0 && value < 6)
-                value = (int)g_FileManager.m_MapXUOP[value].Start;
+                value = AddressToPluginValue(g_FileManager.m_MapXUOP[value].Start);
 
             break;
         }
@@ -3098,7 +3203,7 @@ int COrion::ValueInt(const VALUE_KEY_INT &key, int value)
         }
         case VKI_CLILOC_ENU_ADDRESS:
         {
-            value = (int)g_ClilocManager.Cliloc("enu")->m_File.Start;
+            value = AddressToPluginValue(g_ClilocManager.Cliloc("enu")->m_File.Start);
 
             break;
         }

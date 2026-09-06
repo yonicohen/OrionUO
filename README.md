@@ -1,3 +1,14 @@
+# macOS port
+
+This fork adds a native macOS build (Apple Silicon and Intel) on the
+[`macos-port`](../../tree/macos-port) branch. See
+**[README-macos.md](README-macos.md)** for build instructions, what was fixed and
+what is still outstanding.
+
+`master` is upstream, untouched.
+
+---
+
 # Notes
 
 The public version in all repositories of the project is temporarily not updated.

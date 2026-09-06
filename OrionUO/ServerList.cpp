@@ -64,6 +64,8 @@ void CServerList::ParsePacket(WISP_DATASTREAM::CDataReader &reader)
         uchar fullPercent = reader.ReadUInt8();
         uchar timezone = reader.ReadUInt8();
         uint ip = reader.ReadUInt32LE(); //little-endian!!!
+        LOG("Server %d: '%s' (%d%% full)\n", (int)i, name.c_str(), (int)fullPercent);
+
         bool selected = (name == g_ServerList.LastServerName);
 
         if (selected)

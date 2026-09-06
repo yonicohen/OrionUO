@@ -28,6 +28,13 @@ CGump::CGump(GUMP_TYPE type, uint serial, int x, int y)
 CGump::~CGump()
 {
     WISPFUN_DEBUG("c84_f1");
+
+    if (m_DisplayList != 0)
+    {
+        glDeleteLists(m_DisplayList, 1);
+        m_DisplayList = 0;
+    }
+
     //Если это гамп, блокирующий игровое окно
     if (Blocked)
     {
@@ -1323,7 +1330,10 @@ void CGump::GenerateFrame(bool stop)
 
     if (g_ConfigManager.GetUseGLListsForInterface())
     {
-        glNewList((GLuint)this, GL_COMPILE);
+        if (m_DisplayList == 0)
+            m_DisplayList = glGenLists(1);
+
+        glNewList(m_DisplayList, GL_COMPILE);
 
         DrawItems((CBaseGUI *)m_Items, Page, Draw2Page);
 
@@ -1439,7 +1449,8 @@ void CGump::Draw()
     }
     else
     {
-        glCallList((GLuint)this);
+        if (m_DisplayList != 0)
+            glCallList(m_DisplayList);
         g_GL.OldTexture = 0;
     }
 

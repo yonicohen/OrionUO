@@ -268,11 +268,10 @@ public:
     virtual bool OnMidMouseButtonDoubleClick() { return false; }
     virtual void OnMidMouseButtonScroll(bool up);
     virtual void OnDragging();
-#if USE_WISP
     virtual void OnCharPress(const WPARAM &wParam, const LPARAM &lParam);
     virtual void OnKeyDown(const WPARAM &wParam, const LPARAM &lParam);
     virtual void OnKeyUp(const WPARAM &wParam, const LPARAM &lParam);
-#else
+#if !USE_WISP
     virtual void OnTextInput(const SDL_TextInputEvent &ev) override;
     virtual void OnKeyDown(const SDL_KeyboardEvent &ev) override;
     virtual void OnKeyUp(const SDL_KeyboardEvent &ev) override;

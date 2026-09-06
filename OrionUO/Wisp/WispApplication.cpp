@@ -52,20 +52,45 @@ int CApplication::Run(HINSTANCE hinstance)
 
     return (int)msg.wParam;
 #else
+    // Mirror the Windows loop above: drain input, yield when idle, and run
+    // OnMainLoop every iteration. It used to run only when an SDL event arrived,
+    // which meant g_ConnectionManager.Recv() and g_Orion.Process() only advanced
+    // while the user happened to be moving the mouse or typing - and the loop
+    // span at 100% CPU whenever they were not.
     bool quit = false;
     while (!quit)
     {
         SDL_Event event;
-        while (SDL_PollEvent(&event))
+        bool hadEvent = false;
+
+        while (!quit && SDL_PollEvent(&event))
         {
-            if (!(quit = WISP_WINDOW::g_WispWindow->OnWindowProc(event)))
-                OnMainLoop();
+            hadEvent = true;
+            quit = WISP_WINDOW::g_WispWindow->OnWindowProc(event);
         }
+
+        if (quit)
+            break;
+
+        if (!hadEvent)
+            SDL_Delay(1);
+
+        OnMainLoop();
     }
 
     return EXIT_SUCCESS;
 #endif
 }
+//---------------------------------------------------------------------------
+// Orion client release this port tracks. Must match what the shard expects;
+// Latest release per the vendor's own update manifest
+// (orionuo.online/Updates5152/BackupsList64.html). Shards that demand the
+// latest client compare against this.
+#define ORION_VERSION_MAJOR 1
+#define ORION_VERSION_MINOR 0
+#define ORION_VERSION_REVISION 37
+#define ORION_VERSION_BUILD 0
+#define ORION_VERSION_STRING "1.0.37.0"
 //---------------------------------------------------------------------------
 string CApplication::GetFileVersion(uint *numericVerion) const
 {
@@ -123,7 +148,16 @@ string CApplication::GetFileVersion(uint *numericVerion) const
 
     return "unknown";
 #else
-    return " Linux";
+    // There is no PE version resource to read off Windows, and the numeric
+    // version was previously left at 0. Servers check it: this shard replies
+    // "This server requires the latest ORION version" and disconnects after a
+    // few seconds in world. Report the Orion release this port corresponds to.
+    if (numericVerion != nullptr)
+        *numericVerion = ((ORION_VERSION_MAJOR & 0xFF) << 24) |
+                         ((ORION_VERSION_MINOR & 0xFF) << 16) |
+                         ((ORION_VERSION_REVISION & 0xFF) << 8) | (ORION_VERSION_BUILD & 0xFF);
+
+    return ORION_VERSION_STRING;
 #endif
 }
 //---------------------------------------------------------------------------

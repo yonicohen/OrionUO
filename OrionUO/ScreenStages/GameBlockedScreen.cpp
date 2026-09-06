@@ -89,7 +89,6 @@ void CGameBlockedScreen::OnLeftMouseButtonUp()
         g_GumpManager.OnLeftMouseButtonUp(true);
 }
 //----------------------------------------------------------------------------------
-#if USE_WISP
 /*!
 Обработка нажатия клавиши
 @param [__in] wparam не подписанный параметр
@@ -132,13 +131,18 @@ void CGameBlockedScreen::OnKeyDown(const WPARAM &wParam, const LPARAM &lParam)
     }
 }
 //----------------------------------------------------------------------------------
-#else
+#if !USE_WISP
 void CGameBlockedScreen::OnTextInput(const SDL_TextInputEvent &ev)
 {
-    NOT_IMPLEMENTED; // FIXME
+    // Adapter onto the platform-neutral handler above. VK_* are SDL keycodes
+    // on this platform, so that switch works verbatim.
+    for (const wchar_t ch : DecodeUTF8(ev.text))
+        OnCharPress((WPARAM)ch, 0);
 }
 void CGameBlockedScreen::OnKeyDown(const SDL_KeyboardEvent &ev)
 {
-    NOT_IMPLEMENTED; // FIXME
+    // Adapter onto the platform-neutral handler above. VK_* are SDL keycodes
+    // on this platform, so that switch works verbatim.
+    OnKeyDown((WPARAM)ev.keysym.sym, 0);
 }
 #endif

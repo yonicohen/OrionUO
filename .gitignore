@@ -63,3 +63,7 @@
 /test_bin64/OrionUO.pdb
 /bin/OrionUO.exe
 /bin/OrionUO.pdb
+build/
+build-debug/
+Client.cuo
+uo_debug.cfg

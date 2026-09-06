@@ -39,9 +39,8 @@ public:
 	*/
     void ProcessSmoothAction(uchar action = 0xFF);
 
-#if USE_WISP
     virtual void OnKeyDown(const WPARAM &wParam, const LPARAM &lParam);
-#else
+#if !USE_WISP
     virtual void OnKeyDown(const SDL_KeyboardEvent &ev) override;
 #endif
 };

@@ -43,7 +43,8 @@ public:
 class CTwofishCrypt
 {
 private:
-    unsigned long m_IP;
+    // Filled by memcpy(&m_IP, IP, 4); as an 8-byte long the top half was garbage.
+    uint32_t m_IP;
     int m_pos;
     keyInstance ki;
     cipherInstance ci;

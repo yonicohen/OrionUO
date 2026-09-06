@@ -109,8 +109,17 @@ bool CGLEngine::Install()
         return false;
 #else
     m_context = SDL_GL_CreateContext(g_OrionWindow.m_window);
-    SDL_GL_MakeCurrent(g_OrionWindow.m_window, m_context);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    if (m_context == nullptr)
+    {
+        LOG("SDL_GL_CreateContext failed: %s\n", SDL_GetError());
+        return false;
+    }
+
+    if (SDL_GL_MakeCurrent(g_OrionWindow.m_window, m_context) < 0)
+    {
+        LOG("SDL_GL_MakeCurrent failed: %s\n", SDL_GetError());
+        return false;
+    }
 #endif
 
     int glewInitResult = glewInit();

@@ -99,10 +99,14 @@ void CConnectionManager::Init()
         if (LPHOSTENT lphost = gethostbyname(hostName))
         {
             WISP_DATASTREAM::CDataWritter stream;
-#if defined(ORION_LINUX)
-            auto addr_list = (struct in_addr *)lphost->h_addr_list; // FIXME: just got it to compile
-            auto addr = lphost->h_addr_list[0];
-            stream.WriteUInt32BE(inet_aton(addr, addr_list));
+#if defined(ORION_POSIX)
+            // h_addr_list[0] is the raw 4-byte address, not a dotted-decimal
+            // string. The previous code fed it to inet_aton and wrote that
+            // function's 0/1 success code as the login seed.
+            in_addr address = {};
+            if (lphost->h_addr_list != nullptr && lphost->h_addr_list[0] != nullptr)
+                memcpy(&address, lphost->h_addr_list[0], sizeof(address));
+            stream.WriteUInt32BE(address.s_addr);
 #else
             stream.WriteUInt32BE(((LPIN_ADDR)lphost->h_addr)->s_addr);
 #endif

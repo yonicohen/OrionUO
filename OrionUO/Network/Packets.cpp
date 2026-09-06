@@ -1533,6 +1533,20 @@ CPacketCustomHouseAddStair::CPacketCustomHouseAddStair(ushort graphic, int x, in
     WriteUInt8(0x0A);
 }
 //----------------------------------------------------------------------------------
+CPacketOrionVersionFace::CPacketOrionVersionFace()
+    : CPacket(11)
+{
+    WriteUInt8(0xBF);
+    WriteUInt16BE(11);
+    WriteUInt16BE(0xFACE);
+    WriteUInt16BE(OCT_ORION_VERSION);
+
+    // The stock Sphere script only checks for 1.0.0.0, but shards demanding the
+    // latest client compare these four bytes against a real release number.
+    // Sphere fills LOCAL.0 with the packet id, so these land in LOCAL.7..10.
+    WriteUInt32BE(g_Orion.OrionVersionNumeric);
+}
+//----------------------------------------------------------------------------------
 CPacketOrionVersion::CPacketOrionVersion(int version)
     : CPacket(9)
 {

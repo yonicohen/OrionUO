@@ -3,13 +3,18 @@
 #if !defined(ORION_WINDOWS)
 
 #include <unistd.h>
+#include <time.h>
 
 #include <chrono>
 #include <thread>
 
 #define NO_SDL_GLEXT
 #include <GL/glew.h>
+#if defined(ORION_OSX)
+#include <OpenGL/gl.h>
+#else
 #include <GL/gl.h>
+#endif
 #include <SDL2/SDL.h>
 #include <zlib.h>
 #include <FreeImage.h>
@@ -119,56 +124,62 @@ typedef unsigned int UINT;
 #define WM_KEYDOWN 19
 #define WM_MOUSEMOVE 21
 #define WM_SYSCOMMAND 25
-#define SC_MAXIMIZE 0
-#define SC_RESTORE 0
+// Both used to be 0, so maximize and restore were indistinguishable.
+#define SC_MAXIMIZE 0xF030
+#define SC_RESTORE 0xF120
 
 const unsigned int WM_NCPAINT = 0x85;
 #define SM_CXSCREEN 0
 #define SM_CYSCREEN 1
 
-#define VK_RETURN 13
-#define VK_ESCAPE 27
-#define VK_TAB 9
-#define VK_SHIFT 1
-#define VK_CONTROL 2
-#define VK_MENU 3
-#define VK_RMENU 4
-#define VK_LEFT 5
-#define VK_RIGHT 6
-#define VK_DOWN 7
-#define VK_UP 8
-#define VK_END 10
-#define VK_HOME 11
-#define VK_NEXT 12
-#define VK_PRIOR 14
-#define VK_F4 15
-#define VK_DELETE 16
-#define VK_F1 17
-#define VK_F2 18
-#define VK_F3 19
-#define VK_F5 21
-#define VK_F6 22
-#define VK_F7 23
-#define VK_F8 24
-#define VK_F9 25
-#define VK_F10 26
-#define VK_F11 27
-#define VK_F12 28
-#define VK_CAPITAL 29
-#define VK_PAUSE 30
-#define VK_SPACE 31
-#define VK_BACK 32
-#define VK_SCROLL 33
-#define VK_NUMPAD0 34
-#define VK_NUMPAD1 35
-#define VK_NUMPAD2 36
-#define VK_NUMPAD3 37
-#define VK_NUMPAD4 38
-#define VK_NUMPAD5 39
-#define VK_NUMPAD6 40
-#define VK_NUMPAD7 41
-#define VK_NUMPAD8 42
-#define VK_NUMPAD9 43
+// On this platform OnKey()/OnKeyDown() are handed SDL keycodes, so the VK_
+// aliases must BE the SDL keycodes. They used to be invented sequential numbers
+// matching neither Win32 nor SDL: VK_BACK was 32, which is SDLK_SPACE, and
+// VK_UP was 8, which is SDLK_BACKSPACE - so space deleted a character, backspace
+// moved the caret, and only Return/Tab/Escape worked, by coincidence.
+#define VK_RETURN SDLK_RETURN
+#define VK_ESCAPE SDLK_ESCAPE
+#define VK_TAB SDLK_TAB
+#define VK_SHIFT SDLK_LSHIFT
+#define VK_CONTROL SDLK_LCTRL
+#define VK_MENU SDLK_LALT
+#define VK_RMENU SDLK_RALT
+#define VK_LEFT SDLK_LEFT
+#define VK_RIGHT SDLK_RIGHT
+#define VK_DOWN SDLK_DOWN
+#define VK_UP SDLK_UP
+#define VK_END SDLK_END
+#define VK_HOME SDLK_HOME
+#define VK_NEXT SDLK_PAGEDOWN
+#define VK_PRIOR SDLK_PAGEUP
+#define VK_DELETE SDLK_DELETE
+#define VK_BACK SDLK_BACKSPACE
+#define VK_SPACE SDLK_SPACE
+#define VK_CAPITAL SDLK_CAPSLOCK
+#define VK_PAUSE SDLK_PAUSE
+#define VK_SCROLL SDLK_SCROLLLOCK
+#define VK_F1 SDLK_F1
+#define VK_F2 SDLK_F2
+#define VK_F3 SDLK_F3
+#define VK_F4 SDLK_F4
+#define VK_F5 SDLK_F5
+#define VK_F6 SDLK_F6
+#define VK_F7 SDLK_F7
+#define VK_F8 SDLK_F8
+#define VK_F9 SDLK_F9
+#define VK_F10 SDLK_F10
+#define VK_F11 SDLK_F11
+#define VK_F12 SDLK_F12
+#define VK_NUMPAD0 SDLK_KP_0
+#define VK_NUMPAD1 SDLK_KP_1
+#define VK_NUMPAD2 SDLK_KP_2
+#define VK_NUMPAD3 SDLK_KP_3
+#define VK_NUMPAD4 SDLK_KP_4
+#define VK_NUMPAD5 SDLK_KP_5
+#define VK_NUMPAD6 SDLK_KP_6
+#define VK_NUMPAD7 SDLK_KP_7
+#define VK_NUMPAD8 SDLK_KP_8
+#define VK_NUMPAD9 SDLK_KP_9
 
 #define PM_REMOVE 0x0001
 #define MK_MBUTTON 0
@@ -189,15 +200,19 @@ const unsigned int WM_NCPAINT = 0x85;
 #define CS_VREDRAW 0
 #define WS_OVERLAPPEDWINDOW 0
 #define WS_EX_WINDOWEDGE 0
-#define SM_CYFRAME 0
-#define SM_CYCAPTION 0
-#define SM_CXSIZEFRAME 0
+// These previously all aliased to 0, i.e. to SM_CXSCREEN, so every frame-metric
+// query silently returned the screen width.
+#define SM_CYFRAME 2
+#define SM_CYCAPTION 3
+#define SM_CXSIZEFRAME 4
 #define COLOR_WINDOW 0
 #define SW_SHOWNORMAL 0
 #define IDI_ORIONUO 0
 #define IDC_CURSOR1 1
 #define MAKEINTRESOURCE(x) x
-#define CF_UNICODETEXT 0
+// CF_TEXT and CF_UNICODETEXT both used to be 0, so the clipboard could not
+// tell an ANSI request from a wide one.
+#define CF_UNICODETEXT 2
 
 #define LANG_RUSSIAN 0
 #define LANG_FRENCH 1
@@ -205,8 +220,11 @@ const unsigned int WM_NCPAINT = 0x85;
 #define LANG_SPANISH 3
 #define LANG_JAPANESE 4
 #define LANG_KOREAN 5
+// Not a real Win32 LANGID; just a value outside the mapped set so the
+// GetCurrentLocale switch falls through to its English default.
+#define LANG_ENGLISH 6
 
-#define CF_TEXT 0
+#define CF_TEXT 1
 
 #define MAX_PATH 256
 
@@ -229,6 +247,10 @@ struct RECT
     int bottom;
 };
 
+// Registered by CWindow::Create so the Win32 window shims below can act on the
+// real SDL window; the HWND they are handed is always null off Windows.
+void SetStubWindow(SDL_Window *window);
+
 // Bad and very ugly "API" stuff
 bool GetWindowRect(void *, RECT *);
 bool SetWindowPos(void *, void *, int, int, int, int, int);
@@ -243,6 +265,9 @@ void *GlobalLock(void *);
 bool GlobalUnlock(void *);
 
 // cmd line
+// Captured from main(); the Orion Launcher passes the shard address as
+// "-login host,port", so without this the client has no server to reach.
+void SetStubCommandLine(int argc, char **argv);
 wchar_t *GetCommandLineW();
 const wchar_t **CommandLineToArgvW(wchar_t *, int *);
 void *ShellExecuteA(void *, const char *, const char *, const char *, const char *, int);
@@ -277,7 +302,6 @@ struct WSADATA
 bool WSAStartup(int, void *);
 void WSASetLastError(int);
 int WSACleanup(void);
-int recvfrom(int, const char *, int, int, const struct sockaddr *, int *);
 #define closesocket close
 #define INVALID_SOCKET -1
 #define SOCKET_ERROR -1
@@ -285,11 +309,21 @@ int recvfrom(int, const char *, int, int, const struct sockaddr *, int *);
 typedef struct hostent HOSTENT;
 typedef HOSTENT *LPHOSTENT;
 #define SOCKADDR struct sockaddr
-#define SOCKADDR_IN struct in_addr
+// Win32 spells this sockaddr_in. Aliasing it to in_addr made
+// sizeof(SOCKADDR_IN) four bytes, which is passed to sendto() as the
+// address length and makes every ICMP ping fail.
+#define SOCKADDR_IN struct sockaddr_in
 #define LPIN_ADDR struct in_addr *
 #define LPSOCKADDR const SOCKADDR *
 
 // String
+// MSVC spells this localtime_s(tm *, const time_t *); POSIX spells it
+// localtime_r(const time_t *, tm *), with the arguments the other way round.
+inline int localtime_s(struct tm *result, const time_t *timer)
+{
+    return (result == nullptr || timer == nullptr || localtime_r(timer, result) == nullptr) ? -1 : 0;
+}
+
 #define strncpy_s strncpy
 #define lstrlenW wcslen
 #define sprintf_s sprintf
@@ -348,32 +382,42 @@ wchar_t *_wcsupr(wchar_t *s);
 #define BASS_ERROR_FREQ 19
 #define BASS_ERROR_MEM 19
 #define BASS_ErrorGetCode() 0
-#define BASS_SAMPLE_FLOAT 0
-#define BASS_SAMPLE_3D 0
-#define BASS_SAMPLE_SOFTWARE 0
-#define BASS_ChannelPlay(x, y) false
-#define BASS_StreamFree(x) false
-#define BASS_ChannelIsActive(x) false
-#define BASS_ChannelStop(x)
-#define BASS_ATTRIB_VOL 0
-#define BASS_MIDI_DECAYEND 0
-#define BASS_SAMPLE_LOOP 0
+// Audio. These used to expand to no-ops, so a non-Windows build was completely
+// silent. They are now backed by SDL_mixer in Managers/SoundBackend.cpp, keeping
+// the BASS names so the CSoundManager logic above is unchanged.
+//
+// The flag values match real BASS so the constants stay meaningful; note that
+// BASS_SAMPLE_LOOP in particular must be a distinct bit, because it is how the
+// caller asks for looping music.
+#define BASS_SAMPLE_LOOP 4
+#define BASS_SAMPLE_3D 8
+#define BASS_SAMPLE_SOFTWARE 16
+#define BASS_SAMPLE_FLOAT 256
+#define BASS_ATTRIB_VOL 2
+#define BASS_MIDI_DECAYEND 0x400
+#define BASS_DEVICE_3D 4
+#define BASS_3DALG_FULL 1
+#define BASS_CONFIG_3DALGORITHM 21
+#define BASS_CONFIG_SRC 43
+#define BASS_CONFIG_MIDI_DEFFONT 0x10403
 #define MAXERRORLENGTH 64
-#define BASS_GetVolume() 0.0f
-#define BASS_Start()
-#define BASS_Pause()
-#define BASS_Free()
-#define BASS_CONFIG_MIDI_DEFFONT 0
-#define BASS_3DALG_FULL 0
-#define BASS_CONFIG_3DALGORITHM 0
-#define BASS_CONFIG_SRC 0
-#define BASS_DEVICE_3D 0
-#define BASS_Init(a, b, c, d, e) true
-#define BASS_SetConfig(a, b) true
-#define BASS_StreamCreateFile(a, b, c, d, e) nullptr
-#define BASS_ChannelSetAttribute(a, b, c)
-#define BASS_MIDI_StreamCreateFile(a, b, c, d, e, f) nullptr
-#define BASS_SetConfigPtr(a, b) false
 #define mciGetErrorString(a, b, c) false
+
+bool BASS_Init(int device, int frequency, int flags, void *window, void *guid);
+void BASS_Free();
+void BASS_Start();
+void BASS_Pause();
+float BASS_GetVolume();
+bool BASS_SetConfig(int option, int value);
+bool BASS_SetConfigPtr(int option, const char *value);
+HSTREAM
+BASS_StreamCreateFile(bool fromMemory, const void *file, uint64_t offset, uint64_t length, uint32_t flags);
+HSTREAM BASS_MIDI_StreamCreateFile(
+    bool fromMemory, const void *file, uint64_t offset, uint64_t length, uint32_t flags, uint32_t frequency);
+bool BASS_ChannelPlay(HSTREAM handle, bool loop);
+void BASS_ChannelStop(HSTREAM handle);
+bool BASS_ChannelIsActive(HSTREAM handle);
+void BASS_ChannelSetAttribute(HSTREAM handle, int attribute, float value);
+bool BASS_StreamFree(HSTREAM handle);
 
 #endif

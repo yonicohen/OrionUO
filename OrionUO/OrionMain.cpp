@@ -75,6 +75,8 @@ int main(int argc, char **argv)
 {
     WISPFUN_DEBUG();
 
+    SetStubCommandLine(argc, argv);
+
     // TODO: good cli parsing api
     // keep this simple for now just for travis-ci
     for (int i = 0; i < argc; i++)
