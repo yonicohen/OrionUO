@@ -10,6 +10,19 @@ The upstream source has not been updated since ~2018 and has diverged from the
 current Orion binary, which matters for one protocol handshake (see
 [Known gaps](#known-gaps)).
 
+Verified working against a live Sphere 0.56b shard: login, character creation,
+world rendering, movement, sound, text input, vendors and gump interaction.
+
+## Getting the code
+
+```bash
+git clone -b macos-port https://github.com/yonicohen/OrionUO.git
+cd OrionUO
+```
+
+This is a fork of [Hotride/OrionUO](https://github.com/Hotride/OrionUO); the port
+lives on the `macos-port` branch, `master` is upstream untouched.
+
 ---
 
 ## Building
@@ -255,21 +268,25 @@ they sit inside `#if USE_WISP` blocks or have working SDL equivalents:
 
 ## Work remaining
 
-### Should be done before this is shared
+### If you contribute
 
-- **Remove the temporary diagnostics.** Several verbose `LOG` calls were added
-  for debugging and should go: `SERVER SAYS` (`PacketManager.cpp`), the
-  extended-command subcommand dump, `CharacterSelection(pos=…)`
-  (`OrionUO.cpp`), `Creating character with name …` (`SelectTownScreen.cpp`),
-  `Re-announcing Orion version` (`OrionUO.cpp`), and the server-list dump
-  (`ServerList.cpp`).
 - **Line endings.** Most upstream files are CRLF. Scripted edits silently
-  rewrite them to LF and produce enormous diffs; check `git diff --stat` against
-  `--ignore-cr-at-eol` before committing.
+  rewrite them to LF and produce enormous diffs — a one-line change can appear
+  as thousands. Always compare `git diff --stat` against
+  `git diff --stat --ignore-cr-at-eol` before committing.
+- **Watch for Windows type-width assumptions.** Four separate bugs here came
+  from them: `unsigned long` assumed to be 32-bit (three times) and `wchar_t`
+  assumed to be 16-bit (once). If something crashes in crypto or text handling,
+  look there first.
 
 ### Worth doing
 
 - **`SetSize` on the window** is the last stub reachable at runtime.
+- **`CPingThread` can be constructed with an empty host** when login fails
+  before the server list arrives. Harmless, but it should be guarded.
+- The server-list log line in `ServerList.cpp` is kept deliberately — it prints
+  the names a shard advertises, which is how you notice you are connecting to
+  the wrong entry.
 - **Fold in the CrossUO fixes.** CrossUO is the maintained fork of this codebase
   and has years of additional portability work.
 - **Stop depending on `sdl2-compat`** by building against SDL2 proper, or move to
