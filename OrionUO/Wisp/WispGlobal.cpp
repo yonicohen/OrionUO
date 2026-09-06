@@ -46,6 +46,7 @@ int CalculatePercents(int max, int current, int maxValue)
 //----------------------------------------------------------------------------------
 string EncodeUTF8(const wstring &wstr)
 {
+#if USE_WISP
     int size = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
     string result = "";
 
@@ -57,10 +58,24 @@ string EncodeUTF8(const wstring &wstr)
     }
 
     return result;
+#else
+    // This used to call the WideCharToMultiByte stub, which returned 0, so every
+    // outgoing unicode string was encoded as empty.
+    try
+    {
+        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+        return converter.to_bytes(wstr);
+    }
+    catch (const std::range_error &)
+    {
+        return string();
+    }
+#endif
 }
 //----------------------------------------------------------------------------------
 wstring DecodeUTF8(const string &str)
 {
+#if USE_WISP
     int size = MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
     wstring result = L"";
 
@@ -72,6 +87,20 @@ wstring DecodeUTF8(const string &str)
     }
 
     return result;
+#else
+    // Same problem in reverse: this decoded every cliloc, tooltip and incoming
+    // unicode string to nothing. Server text is untrusted, so a malformed
+    // sequence must not throw out into the packet handlers.
+    try
+    {
+        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+        return converter.from_bytes(str);
+    }
+    catch (const std::range_error &)
+    {
+        return wstring();
+    }
+#endif
 }
 //----------------------------------------------------------------------------------
 string ToCamelCaseA(string str)
@@ -116,7 +145,7 @@ wstring ToCamelCaseW(wstring str)
     return str;
 }
 //----------------------------------------------------------------------------------
-#if defined(ORION_LINUX)
+#if defined(ORION_POSIX)
 const string &ToString(const string &str)
 {
     return str;

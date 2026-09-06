@@ -67,6 +67,11 @@ protected:
 
     CGLFrameBuffer m_FrameBuffer{ CGLFrameBuffer() };
 
+    // Display list id owned by this gump. Allocated lazily via glGenLists;
+    // previously the gump's own address was used as the id, which truncates
+    // (and can collide) on 64-bit builds.
+    GLuint m_DisplayList = 0;
+
     virtual void CalculateGumpState();
 
     virtual void RecalculateSize();
@@ -161,11 +166,10 @@ public:
     virtual bool OnMidMouseButtonDoubleClick() { return false; }
     virtual void OnMidMouseButtonScroll(bool up);
     virtual void OnDragging();
-#if USE_WISP
     virtual void OnCharPress(const WPARAM &wParam, const LPARAM &lParam) {}
     virtual void OnKeyDown(const WPARAM &wParam, const LPARAM &lParam) {}
     virtual void OnKeyUp(const WPARAM &wParam, const LPARAM &lParam) {}
-#else
+#if !USE_WISP
     virtual void OnTextInput(const SDL_TextInputEvent &ev){};
     virtual void OnKeyDown(const SDL_KeyboardEvent &ev){};
     virtual void OnKeyUp(const SDL_KeyboardEvent &ev){};

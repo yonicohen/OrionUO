@@ -1,5 +1,9 @@
 #include "Sockets.h"
 #include <cassert>
+#if !defined(ORION_WINDOWS)
+#include <fcntl.h>
+#include <errno.h>
+#endif
 #include <string.h>
 #include <SDL_timer.h>
 
@@ -222,7 +226,7 @@ int icmp_query(icmp_handle handle, const char *ip, uint32_t *timems)
         tomeoutInfo.tv_sec = 1;
         tomeoutInfo.tv_usec = 0;
 
-        if (select(1, &readfds, nullptr, nullptr, &tomeoutInfo))
+        if (select(h + 1, &readfds, nullptr, nullptr, &tomeoutInfo))
         {
             ECHOREPLY answer;
             sockaddr_in sourceAddress;
@@ -299,9 +303,38 @@ bool tcp_connect(tcp_socket socket, const char *address, uint16_t port)
 
         memcpy(&caddr.sin_addr, he->h_addr, he->h_length);
     }
-    LOG("socket connected\n");
     caddr.sin_port = htons(port);
-    return (connect(h, (struct sockaddr *)&caddr, sizeof(caddr)) != -1);
+
+    // connect() here is blocking and runs on the main thread, so an unreachable
+    // address froze the whole client for the full TCP timeout. Go non-blocking
+    // and wait a bounded amount of time instead.
+    const int flags = fcntl(h, F_GETFL, 0);
+    fcntl(h, F_SETFL, flags | O_NONBLOCK);
+
+    bool connected = connect(h, (struct sockaddr *)&caddr, sizeof(caddr)) != -1;
+
+    if (!connected && errno == EINPROGRESS)
+    {
+        fd_set wfds;
+        FD_ZERO(&wfds);
+        FD_SET(h, &wfds);
+
+        struct timeval tv = { 10, 0 };
+        if (select(h + 1, nullptr, &wfds, nullptr, &tv) > 0)
+        {
+            int error = 0;
+            socklen_t length = sizeof(error);
+            connected = getsockopt(h, SOL_SOCKET, SO_ERROR, &error, &length) == 0 && error == 0;
+        }
+    }
+
+    fcntl(h, F_SETFL, flags);
+
+    if (connected)
+        LOG("socket connected\n");
+    else
+        LOG("socket connect failed\n");
+    return connected;
 }
 
 int tcp_select(tcp_socket socket)
@@ -316,7 +349,11 @@ int tcp_select(tcp_socket socket)
 
     struct timeval tv = { 0, 0 };
 
-    auto r = select(h, &rfds, nullptr, nullptr, &tv);
+    // select() takes the highest descriptor PLUS ONE. Passing h examined only
+    // 0..h-1, i.e. everything except our own socket, so the client could send
+    // but never receive. Winsock ignores this argument, which is why it worked
+    // on Windows.
+    auto r = select(h + 1, &rfds, nullptr, nullptr, &tv);
     LOG("tcp_select: %d\n", r);
     return r;
 }
@@ -402,7 +439,7 @@ int icmp_query(icmp_handle handle, const char *ip, uint32_t *timems)
         FD_SET(h, &readfds);
 
         timeval tv = { 1, 0 };
-        if (select(1, &readfds, nullptr, nullptr, &tv))
+        if (select(h + 1, &readfds, nullptr, nullptr, &tv))
         {
             ECHOREPLY answer;
             sockaddr_in sourceAddress;

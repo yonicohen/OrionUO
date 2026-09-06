@@ -57,10 +57,9 @@ public:
 
     virtual void OnLeftMouseButtonDown();
 
-#if USE_WISP
     void OnCharPress(const WPARAM &wParam, const LPARAM &lParam);
     void OnKeyDown(const WPARAM &wParam, const LPARAM &lParam);
-#else
+#if !USE_WISP
     virtual void OnTextInput(const SDL_TextInputEvent &ev) override;
     virtual void OnKeyDown(const SDL_KeyboardEvent &ev) override;
 #endif

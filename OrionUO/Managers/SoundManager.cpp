@@ -249,13 +249,22 @@ void CSoundManager::PlayMidi(int index, bool warmode)
         else
             StopMusic();
 
-        char musicPath[100] = { 0 };
         MidiInfoStruct midiInfo = MidiInfo[index];
+
+#if defined(ORION_WINDOWS)
+        char musicPath[100] = { 0 };
         sprintf_s(musicPath, "music\\%s", midiInfo.musicName);
 
         wstring midiName = ToWString(musicPath);
         HSTREAM streamHandle =
             BASS_MIDI_StreamCreateFile(FALSE, midiName.c_str(), 0, 0, BASS_MIDI_DECAYEND, 0);
+#else
+        // The original built this path with a backslash and left it relative to
+        // the process working directory; neither resolves off Windows.
+        const os_path midiPath = g_App.UOFilesPath(string("music/") + midiInfo.musicName);
+        HSTREAM streamHandle =
+            BASS_MIDI_StreamCreateFile(FALSE, midiPath.c_str(), 0, 0, BASS_MIDI_DECAYEND, 0);
+#endif
         float volume = GetVolumeValue(-1, true);
         BASS_ChannelSetAttribute(streamHandle, BASS_ATTRIB_VOL, volume);
         BASS_ChannelPlay(streamHandle, midiInfo.loop);
@@ -297,8 +306,14 @@ void CSoundManager::PlayMP3(const os_path &fileName, int index, bool loop, bool 
 void CSoundManager::StopWarMusic()
 {
     WISPFUN_DEBUG("c156_f13");
-    BASS_ChannelStop(m_WarMusic);
-    m_WarMusic = 0;
+    if (m_WarMusic != 0)
+    {
+        BASS_ChannelStop(m_WarMusic);
+        // The handle is dropped here, so release the stream instead of leaking
+        // one on every entry into and out of war mode.
+        FreeStream(m_WarMusic);
+        m_WarMusic = 0;
+    }
 
     if (m_Music != 0 && !BASS_ChannelIsActive(m_Music))
         BASS_ChannelPlay(m_Music, 1);
@@ -307,10 +322,19 @@ void CSoundManager::StopWarMusic()
 void CSoundManager::StopMusic()
 {
     WISPFUN_DEBUG("c156_f14");
-    BASS_ChannelStop(m_Music);
-    m_Music = 0;
-    BASS_ChannelStop(m_WarMusic);
-    m_WarMusic = 0;
+    if (m_Music != 0)
+    {
+        BASS_ChannelStop(m_Music);
+        FreeStream(m_Music);
+        m_Music = 0;
+    }
+
+    if (m_WarMusic != 0)
+    {
+        BASS_ChannelStop(m_WarMusic);
+        FreeStream(m_WarMusic);
+        m_WarMusic = 0;
+    }
 }
 //----------------------------------------------------------------------------------
 void CSoundManager::SetMusicVolume(float volume)

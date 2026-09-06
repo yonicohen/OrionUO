@@ -277,10 +277,9 @@ public:
     GUMP_SLIDER_CLICK_EVENT_H;
     GUMP_SLIDER_MOVE_EVENT_H;
 
-#if USE_WISP
     void OnCharPress(const WPARAM &wParam, const LPARAM &lParam);
     void OnKeyDown(const WPARAM &wParam, const LPARAM &lParam);
-#else
+#if !USE_WISP
     virtual void OnTextInput(const SDL_TextInputEvent &ev) override;
     virtual void OnKeyDown(const SDL_KeyboardEvent &ev) override;
 #endif

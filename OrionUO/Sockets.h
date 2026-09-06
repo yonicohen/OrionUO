@@ -12,7 +12,10 @@
 typedef struct hostent HOSTENT;
 typedef HOSTENT *LPHOSTENT;
 #define SOCKADDR struct sockaddr
-#define SOCKADDR_IN struct in_addr
+// Win32 spells this sockaddr_in. Aliasing it to in_addr made
+// sizeof(SOCKADDR_IN) four bytes, which is passed to sendto() as the
+// address length and makes every ICMP ping fail.
+#define SOCKADDR_IN struct sockaddr_in
 #define LPIN_ADDR struct in_addr *
 #define LPSOCKADDR const SOCKADDR *
 #endif

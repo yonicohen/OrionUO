@@ -32,16 +32,18 @@ FIND_PATH(SDL2MIXER_INCLUDE_DIR SDL_mixer.h
   HINTS
   $ENV{SDL2MIXERDIR}
   $ENV{SDL2DIR}
-  PATH_SUFFIXES include
+  # include/SDL2 matters: that is where every distro and Homebrew put the header.
+  PATH_SUFFIXES include/SDL2 include
   PATHS
   ~/Library/Frameworks
   /Library/Frameworks
-  /usr/local/include/SDL2
-  /usr/include/SDL2
-  /sw/include/SDL2 # Fink
-  /opt/local/include/SDL2 # DarwinPorts
-  /opt/csw/include/SDL2 # Blastwave
-  /opt/include/SDL2
+  /opt/homebrew # Homebrew on Apple Silicon
+  /usr/local # Homebrew on Intel
+  /usr
+  /sw # Fink
+  /opt/local # DarwinPorts
+  /opt/csw # Blastwave
+  /opt
 )
 
 FIND_LIBRARY(SDL2MIXER_LIBRARY 
@@ -53,6 +55,7 @@ FIND_LIBRARY(SDL2MIXER_LIBRARY
   PATHS
   ~/Library/Frameworks
   /Library/Frameworks
+  /opt/homebrew # Homebrew on Apple Silicon
   /usr/local
   /usr
   /sw

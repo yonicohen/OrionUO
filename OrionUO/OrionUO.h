@@ -18,6 +18,8 @@ public:
     string DefaultLogin = "";
     int DefaultPort = 0;
     uint OrionVersionNumeric = 0;
+    int m_OrionAnnounceRepeats = 0;
+    uint m_OrionAnnounceNext = 0;
 
 private:
     uint m_CRC_Table[256];
@@ -39,6 +41,9 @@ private:
     UCHAR_LIST m_AnimData;
 
     string m_GameServerIP = "";
+    // Host we actually logged in to, used when a shard relays us to an
+    // address on its own LAN.
+    string m_LoginServerHost = "";
 
     bool LoadClientConfig();
     void LoadAutoLoginNames();

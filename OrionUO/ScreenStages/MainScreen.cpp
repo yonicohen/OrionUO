@@ -192,7 +192,31 @@ void CMainScreen::OnKeyDown(const WPARAM &wParam, const LPARAM &lParam)
 #else
 void CMainScreen::OnTextInput(const SDL_TextInputEvent &ev)
 {
-    NOT_IMPLEMENTED; // FIXME
+    WISPFUN_DEBUG("c165_f7");
+    if (g_EntryPointer == nullptr)
+        g_EntryPointer = m_MainGump.m_PasswordFake;
+
+    // SDL hands us a UTF-8 chunk, which may be more than one character.
+    for (const wchar_t ch : DecodeUTF8(ev.text))
+    {
+        if (ch >= 0x0100 || !g_FontManager.IsPrintASCII((uchar)ch))
+            continue;
+
+        if (g_EntryPointer->Length() >= 16)
+            break;
+
+        // The visible password field only ever holds asterisks; the real text
+        // accumulates in m_Password.
+        if (g_EntryPointer == m_MainGump.m_PasswordFake)
+        {
+            if (g_EntryPointer->Insert(L'*'))
+                m_Password->Insert(ch);
+        }
+        else
+            g_EntryPointer->Insert(ch);
+    }
+
+    m_Gump.WantRedraw = true;
 }
 void CMainScreen::OnKeyDown(const SDL_KeyboardEvent &ev)
 {

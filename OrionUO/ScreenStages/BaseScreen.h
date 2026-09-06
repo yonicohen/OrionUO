@@ -89,7 +89,6 @@ public:
     virtual bool OnMidMouseButtonDoubleClick() { return m_Gump.OnMidMouseButtonDoubleClick(); }
     virtual void OnMidMouseButtonScroll(bool up) { m_Gump.OnMidMouseButtonScroll(up); }
     virtual void OnDragging() { m_Gump.OnDragging(); }
-#if USE_WISP
     virtual void OnCharPress(const WPARAM &wParam, const LPARAM &lParam)
     {
         m_Gump.OnCharPress(wParam, lParam);
@@ -102,7 +101,7 @@ public:
     {
         m_Gump.OnKeyUp(wParam, lParam);
     }
-#else
+#if !USE_WISP
     virtual void OnTextInput(const SDL_TextInputEvent &ev) { m_Gump.OnTextInput(ev); }
     virtual void OnKeyDown(const SDL_KeyboardEvent &ev) { m_Gump.OnKeyDown(ev); }
     virtual void OnKeyUp(const SDL_KeyboardEvent &ev) { m_Gump.OnKeyUp(ev); }

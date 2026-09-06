@@ -100,7 +100,6 @@ void CGumpTextEntryDialog::GUMP_BUTTON_EVENT_C
         SendTextEntryDialogResponse(false);
 }
 //----------------------------------------------------------------------------------
-#if USE_WISP
 void CGumpTextEntryDialog::OnCharPress(const WPARAM &wParam, const LPARAM &lParam)
 {
     WISPFUN_DEBUG("c130_f5");
@@ -156,14 +155,19 @@ void CGumpTextEntryDialog::OnKeyDown(const WPARAM &wParam, const LPARAM &lParam)
             break;
     }
 }
-#else
+#if !USE_WISP
 void CGumpTextEntryDialog::OnTextInput(const SDL_TextInputEvent &ev)
 {
-    NOT_IMPLEMENTED; // FIXME
+    // Adapter onto the platform-neutral handler above. VK_* are SDL keycodes
+    // on this platform, so that switch works verbatim.
+    for (const wchar_t ch : DecodeUTF8(ev.text))
+        OnCharPress((WPARAM)ch, 0);
 }
 void CGumpTextEntryDialog::OnKeyDown(const SDL_KeyboardEvent &ev)
 {
-    NOT_IMPLEMENTED; // FIXME
+    // Adapter onto the platform-neutral handler above. VK_* are SDL keycodes
+    // on this platform, so that switch works verbatim.
+    OnKeyDown((WPARAM)ev.keysym.sym, 0);
 }
 #endif
 //----------------------------------------------------------------------------------

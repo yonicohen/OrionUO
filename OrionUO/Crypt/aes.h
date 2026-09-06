@@ -78,7 +78,9 @@ INCLUDE IMPLEMENTATION SPECIFIC INFORMATION.
 */
 
 typedef unsigned char u8;
-typedef unsigned long u32; /* 32-bit unsigned quantity */
+// MUST be exactly 32 bits: "unsigned long" is 8 bytes on any LP64 target,
+// which doubled every buffer in the key schedule and overran the stack.
+typedef unsigned int u32; /* 32-bit unsigned quantity */
 typedef u32 fullSbox[4][256];
 
 /* The structure for key information */

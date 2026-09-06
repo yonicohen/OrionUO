@@ -1057,7 +1057,6 @@ void CGumpManager::OnDragging(bool blocked)
     }
 }
 //----------------------------------------------------------------------------------
-#if USE_WISP
 /*!
 Обработка нажатия клавиши
 @param [__in] wparam не подписанный параметр
@@ -1151,16 +1150,21 @@ bool CGumpManager::OnKeyDown(const WPARAM &wParam, const LPARAM &lParam, bool bl
 
     return result;
 }
-#else
+#if !USE_WISP
 bool CGumpManager::OnTextInput(const SDL_TextInputEvent &ev, bool blocked)
 {
-    NOT_IMPLEMENTED; // FIXME
-    return false;
+    // Adapter onto the platform-neutral handler above. VK_* are SDL keycodes
+    // on this platform, so that switch works verbatim.
+    bool result = false;
+    for (const wchar_t ch : DecodeUTF8(ev.text))
+        result |= OnCharPress((WPARAM)ch, 0, blocked);
+    return result;
 }
 bool CGumpManager::OnKeyDown(const SDL_KeyboardEvent &ev, bool blocked)
 {
-    NOT_IMPLEMENTED; // FIXME
-    return false;
+    // Adapter onto the platform-neutral handler above. VK_* are SDL keycodes
+    // on this platform, so that switch works verbatim.
+    return OnKeyDown((WPARAM)ev.keysym.sym, 0, blocked);
 }
 #endif
 //----------------------------------------------------------------------------------

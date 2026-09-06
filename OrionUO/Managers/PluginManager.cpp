@@ -10,7 +10,7 @@
 */
 //----------------------------------------------------------------------------------
 #include "stdafx.h"
-#if defined(ORION_LINUX)
+#if defined(ORION_POSIX)
 #include <stdint.h>
 #define CDECL
 #else

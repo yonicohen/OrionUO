@@ -73,7 +73,14 @@ public:
     bool IsMinimizedWindow() const { return ::IsIconic(Handle); }
     bool IsMaximizedWindow() const { return (::IsZoomed(Handle) != FALSE); }
 #else
-    bool IsActive() const { return SDL_GetGrabbedWindow() == m_window; } // TODO: check
+    // SDL_GetGrabbedWindow reports the mouse-grab owner, which is normally null,
+    // so this used to report the window as inactive almost always - which in turn
+    // suppressed every sound effect unless BackgroundSound was on.
+    bool IsActive() const
+    {
+        return m_window != nullptr &&
+               (SDL_GetWindowFlags(m_window) & SDL_WINDOW_INPUT_FOCUS) != 0;
+    }
     void SetTitle(const string &text) const { SDL_SetWindowTitle(m_window, text.c_str()); }
     void ShowWindow(bool show) const { show ? SDL_ShowWindow(m_window) : SDL_HideWindow(m_window); }
     bool IsMinimizedWindow() const { return (SDL_GetWindowFlags(m_window) & SDL_WINDOW_MINIMIZED) != 0; }

@@ -230,6 +230,7 @@ set(managers_src
   Managers/ScreenEffectManager.cpp
   Managers/SkillGroupManager.cpp
   Managers/SkillsManager.cpp
+  Managers/SoundBackend.cpp
   Managers/SoundManager.cpp
   Managers/SpeechManager.cpp
   Managers/UOFileReader.cpp
@@ -357,13 +358,24 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   add_definitions(-DNULL=nullptr)
 endif()
 
+# Apply the precompiled header to a target using whichever mechanism is enabled.
+macro(orion_precompile TARGET)
+  if(ORION_USE_COTIRE)
+    set_target_properties(${TARGET} PROPERTIES COTIRE_CXX_PREFIX_HEADER_INIT "stdafx.h")
+    cotire(${TARGET})
+  else()
+    target_precompile_headers(${TARGET} PRIVATE "${PROJECT_SOURCE_DIR}/OrionUO/stdafx.h")
+  endif()
+endmacro()
+
 macro(orion_library TARGET SRCS)
   string(REPLACE ".cpp" ".h" headers "${SRCS}")
   string(REPLACE "GUI/GUIVirtireGump.h" "GUI/GUIVirtureGump.h" headers "${headers}")
   string(REPLACE "Crypt/twofish.h" "" headers "${headers}")
+  # Declared in Stubs.h (it needs HSTREAM), so there is no paired header.
+  string(REPLACE "Managers/SoundBackend.h" "" headers "${headers}")
   add_library(${TARGET} ${SRCS} ${headers})
-  set_target_properties(${TARGET} PROPERTIES COTIRE_CXX_PREFIX_HEADER_INIT "stdafx.h")
-  cotire(${TARGET})
+  orion_precompile(${TARGET})
 endmacro()
 
 if(ORION_BUILD_MODULES)
@@ -392,23 +404,38 @@ else()
   string(REPLACE "WeatherEffeect.h" "WeatherEffect.h" headers "${headers}")
   string(REPLACE "GUI/GUIVirtireGump.h" "GUI/GUIVirtureGump.h" headers "${headers}")
   string(REPLACE "Crypt/twofish.h" "" headers "${headers}")
+  # Declared in Stubs.h (it needs HSTREAM), so there is no paired header.
+  string(REPLACE "Managers/SoundBackend.h" "" headers "${headers}")
   source_group(TREE "${PROJECT_SOURCE_DIR}/OrionUO/" FILES ${SRCS} ${headers})
   add_executable(OrionUO ${SRCS} ${headers})
 endif()
 
-target_link_libraries(OrionUO PUBLIC ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENGL_LIBRARIES} ${FREEIMAGE_LIBRARIES} ${GLEW_LIBRARIES} ${THREAD})
+target_link_libraries(OrionUO PUBLIC ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} ${SDL2_MIXER_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENGL_LIBRARIES} ${FREEIMAGE_LIBRARIES} ${GLEW_LIBRARIES} ${THREAD})
 
-set_target_properties(OrionUO PROPERTIES COTIRE_CXX_PREFIX_HEADER_INIT "stdafx.h")
-cotire(OrionUO)
+orion_precompile(OrionUO)
+
+if(NOT ORION_WINDOWS)
+  # The rest of bin/ is Windows DLLs, but the MIDI soundfont is portable and the
+  # audio backend needs it to render .mid music at all.
+  add_custom_command(TARGET OrionUO POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${PROJECT_SOURCE_DIR}/bin/uo_4mb_2.sf2" $<TARGET_FILE_DIR:OrionUO>)
+endif()
 
 if(ORION_WINDOWS)
   set_target_properties(OrionUO PROPERTIES LINK_FLAGS "/SUBSYSTEM:WINDOWS")
-  set_target_properties(OrionUO_unity PROPERTIES LINK_FLAGS "/SUBSYSTEM:WINDOWS")
+  if(ORION_USE_COTIRE)
+    set_target_properties(OrionUO_unity PROPERTIES LINK_FLAGS "/SUBSYSTEM:WINDOWS")
+  endif()
   if(ORION_64BITS)
     add_custom_command(TARGET OrionUO POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/test_bin64" $<TARGET_FILE_DIR:OrionUO>)
-    add_custom_command(TARGET OrionUO_unity POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/test_bin64" $<TARGET_FILE_DIR:OrionUO_unity>)
+    if(ORION_USE_COTIRE)
+      add_custom_command(TARGET OrionUO_unity POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/test_bin64" $<TARGET_FILE_DIR:OrionUO_unity>)
+    endif()
   else()
     add_custom_command(TARGET OrionUO POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/bin" $<TARGET_FILE_DIR:OrionUO>)
-    add_custom_command(TARGET OrionUO_unity POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/bin" $<TARGET_FILE_DIR:OrionUO_unity>)
+    if(ORION_USE_COTIRE)
+      add_custom_command(TARGET OrionUO_unity POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory "${PROJECT_SOURCE_DIR}/bin" $<TARGET_FILE_DIR:OrionUO_unity>)
+    endif()
   endif()
 endif()

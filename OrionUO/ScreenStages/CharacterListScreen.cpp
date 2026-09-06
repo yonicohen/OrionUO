@@ -69,7 +69,10 @@ void CCharacterListScreen::ProcessSmoothAction(uchar action)
         if (!g_CharacterList.GetName(g_CharacterList.Selected).length())
             g_Orion.InitScreen(GS_PROFESSION_SELECT);
         else
+        {
+            LOG("character list screen selecting slot %d\n", g_CharacterList.Selected);
             g_Orion.CharacterSelection(g_CharacterList.Selected);
+        }
     }
     else if (action == ID_SMOOTH_CLS_GO_SCREEN_PROFESSION_SELECT)
         g_Orion.InitScreen(GS_PROFESSION_SELECT);
@@ -83,7 +86,6 @@ void CCharacterListScreen::ProcessSmoothAction(uchar action)
     }
 }
 //----------------------------------------------------------------------------------
-#if USE_WISP
 /*!
 Обработка нажатия клавиши
 @param [__in] wparam не подписанный параметр
@@ -98,9 +100,11 @@ void CCharacterListScreen::OnKeyDown(const WPARAM &wParam, const LPARAM &lParam)
     if (wParam == VK_RETURN)
         CreateSmoothAction(ID_SMOOTH_CLS_SELECT_CHARACTER);
 }
-#else
+#if !USE_WISP
 void CCharacterListScreen::OnKeyDown(const SDL_KeyboardEvent &ev)
 {
-    NOT_IMPLEMENTED; // FIXME
+    // Adapter onto the platform-neutral handler above. VK_* are SDL keycodes
+    // on this platform, so that switch works verbatim.
+    OnKeyDown((WPARAM)ev.keysym.sym, 0);
 }
 #endif

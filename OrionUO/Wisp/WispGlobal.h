@@ -2,7 +2,7 @@
 #ifndef WISPGLOBAL_H
 #define WISPGLOBAL_H
 
-#if !defined(ORION_LINUX)
+#if !defined(ORION_POSIX)
 #if !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
 #endif
@@ -59,7 +59,7 @@ string EncodeUTF8(const wstring &str);
 wstring DecodeUTF8(const string &str);
 string ToCamelCaseA(string str);
 wstring ToCamelCaseW(wstring str);
-#if defined(ORION_LINUX)
+#if defined(ORION_POSIX)
 const string &ToString(const string &str);
 #endif
 string ToString(const wstring &wstr);

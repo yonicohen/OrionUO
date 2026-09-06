@@ -94,7 +94,6 @@ void CGumpDrag::OnOkayPressed()
     }
 }
 //----------------------------------------------------------------------------------
-#if USE_WISP
 void CGumpDrag::OnCharPress(const WPARAM &wParam, const LPARAM &lParam)
 {
     WISPFUN_DEBUG("c94_f5");
@@ -179,13 +178,18 @@ void CGumpDrag::OnKeyDown(const WPARAM &wParam, const LPARAM &lParam)
         }
     }
 }
-#else
+#if !USE_WISP
 void CGumpDrag::OnTextInput(const SDL_TextInputEvent &ev)
 {
-    NOT_IMPLEMENTED; // FIXME
+    // Adapter onto the platform-neutral handler above. VK_* are SDL keycodes
+    // on this platform, so that switch works verbatim.
+    for (const wchar_t ch : DecodeUTF8(ev.text))
+        OnCharPress((WPARAM)ch, 0);
 }
 void CGumpDrag::OnKeyDown(const SDL_KeyboardEvent &ev)
 {
-    NOT_IMPLEMENTED; // FIXME
+    // Adapter onto the platform-neutral handler above. VK_* are SDL keycodes
+    // on this platform, so that switch works verbatim.
+    OnKeyDown((WPARAM)ev.keysym.sym, 0);
 }
 #endif

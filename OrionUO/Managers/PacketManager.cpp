@@ -445,12 +445,15 @@ void CPacketManager::SetClientVersion(CLIENT_VERSION newClientVersion)
         m_Packets[0x25].Size = 0x14;
     }
 
-    if (newClientVersion == CV_6060)
+    // Upstream Hotride/OrionUO PR #97: this was == so it only matched exactly
+    // 6.0.6.0, and the sizes were the 0x2000 placeholder rather than the real
+    // packet lengths.
+    if (newClientVersion >= CV_6060)
     {
         CVPRINT("Set new length for packet 0xEE (>= 6.0.6.0)\n");
-        m_Packets[0xEE].Size = 0x2000;
+        m_Packets[0xEE].Size = 0x0A;
         CVPRINT("Set new length for packet 0xEF (>= 6.0.6.0)\n");
-        m_Packets[0xEF].Size = 0x2000;
+        m_Packets[0xEF].Size = 0x15;
         CVPRINT("Set new length for packet 0xF1 (>= 6.0.6.0)\n");
         m_Packets[0xF1].Size = 0x09;
     }
@@ -478,9 +481,9 @@ void CPacketManager::SetClientVersion(CLIENT_VERSION newClientVersion)
     if (newClientVersion >= CV_7000)
     {
         CVPRINT("Set new length for packet 0xEE (>= 7.0.0.0)\n");
-        m_Packets[0xEE].Size = 0x2000;
+        m_Packets[0xEE].Size = 0x0A;
         CVPRINT("Set new length for packet 0xEF (>= 7.0.0.0)\n");
-        m_Packets[0xEF].Size = 0x2000;
+        m_Packets[0xEF].Size = 0x15;
         /*CVPRINT("Set new length for packet 0xF0 (>= 7.0.0.0)\n");
 		m_Packets[0xF0].size = 0x2000;
 		CVPRINT("Set new length for packet 0xF1 (>= 7.0.0.0)\n");
@@ -614,7 +617,6 @@ void CPacketManager::OnPacket()
 
     if (info.save)
     {
-#if !defined(ORION_LINUX) // FIXME: localtime_s (use C++ if possible)
         time_t rawtime;
         struct tm timeinfo;
         char buffer[80];
@@ -628,13 +630,6 @@ void CPacketManager::OnPacket()
             g_TotalRecvSize,
             buffer,
             info.Name);
-#else
-        LOG("--- ^(%d) r(+%d => %d) Server:: %s\n",
-            ticks - g_LastPacketTime,
-            Size,
-            g_TotalRecvSize,
-            info.Name);
-#endif
         LOG_DUMP(Start, (int)Size);
     }
 
@@ -741,6 +736,7 @@ void CPacketManager::PluginReceiveHandler(puchar buf, int size)
 PACKET_HANDLER(LoginError)
 {
     WISPFUN_DEBUG("c150_f12");
+    LOG("Login error, server reason code = %d\n", (int)*Ptr);
     if (g_GameState == GS_MAIN_CONNECT || g_GameState == GS_SERVER_CONNECT ||
         g_GameState == GS_GAME_CONNECT)
     {
@@ -763,7 +759,7 @@ PACKET_HANDLER(RelayServer)
     in_addr addr;
     puint paddr = (puint)Ptr;
     Move(4);
-#if !defined(ORION_LINUX)
+#if !defined(ORION_POSIX)
     addr.S_un.S_addr = *paddr;
 #else
     addr.s_addr = *paddr;
@@ -898,7 +894,10 @@ PACKET_HANDLER(ResendCharacterList)
         g_CharacterList.Selected = autoPos;
 
         if (g_CharacterList.GetName(autoPos).length())
+        {
+            LOG("autologin selecting slot %d\n", autoPos);
             g_Orion.CharacterSelection(autoPos);
+        }
     }
 
     if (*Start == 0x86)
@@ -2456,6 +2455,47 @@ PACKET_HANDLER(ExtendedCommand)
 {
     WISPFUN_DEBUG("c150_f47");
     ushort cmd = ReadUInt16BE();
+
+    // Current Orion moved the OCT_* messages from packet 0xFC to this
+    // subcommand. Servers running the stock Orion-exclusive script send the
+    // version query here and disconnect anything that stays quiet.
+    if (cmd == 0xFACE)
+    {
+        const ushort orionCommand = ReadUInt16BE();
+
+        switch (orionCommand)
+        {
+            case OCT_ORION_FEATURES:
+            {
+                g_OrionFeaturesFlags = ReadUInt32BE();
+                g_ConfigManager.UpdateFeatures();
+                break;
+            }
+            case OCT_ORION_VERSION:
+            {
+                CPacketOrionVersionFace reply;
+                {
+                    string dump;
+                    char byte[4] = { 0 };
+                    const puchar bytes = reply.DataPtr();
+                    for (int i = 0; i < (int)reply.Size(); i++)
+                    {
+                        snprintf(byte, sizeof(byte), "%02X ", bytes[i]);
+                        dump += byte;
+                    }
+                    LOG("Orion version query; replying with: %s\n", dump.c_str());
+                }
+                reply.Send();
+                break;
+            }
+            default:
+                // Extended feature sets this build does not implement.
+                // Extended feature sets this build does not implement.
+                break;
+        }
+
+        return;
+    }
 
     switch (cmd)
     {

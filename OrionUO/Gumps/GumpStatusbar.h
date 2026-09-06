@@ -98,10 +98,9 @@ public:
     virtual void OnLeftMouseButtonDown();
     virtual bool OnLeftMouseButtonDoubleClick();
 
-#if USE_WISP
     virtual void OnCharPress(const WPARAM &wParam, const LPARAM &lParam);
     virtual void OnKeyDown(const WPARAM &wParam, const LPARAM &lParam);
-#else
+#if !USE_WISP
     virtual void OnTextInput(const SDL_TextInputEvent &ev) override;
     virtual void OnKeyDown(const SDL_KeyboardEvent &ev) override;
 #endif

@@ -31,8 +31,13 @@ extern bool g_Asmut;
 #include "OrionApplication.h"
 #include "GLEngine/GLFrameBuffer.h"
 #include "GLEngine/GLTexture.h"
+#if defined(ORION_OSX)
+#include <OpenGL/gl.h>
+#include <OpenGL/glu.h>
+#else
 #include <GL/gl.h>
 #include <GL/glu.h>
+#endif
 #include "EnumList.h"
 #include "DefinitionMacro.h"
 #include "Constants.h"

@@ -72,6 +72,31 @@ void COrionWindow::OnResize(WISP_GEOMETRY::CSize &newSize)
 {
     WISPFUN_DEBUG("c195_f4");
     g_GL.UpdateRect();
+
+    // Grow the world view with the window. Upstream only ever resizes it through
+    // the in-game resizer handle, so enlarging the OS window used to leave the
+    // game view at its old size with dead space around it.
+    if (g_GameState != GS_GAME)
+        return;
+
+    int width = newSize.Width - (g_ConfigManager.GameWindowX + 20);
+    int height = newSize.Height - (g_ConfigManager.GameWindowY + 40);
+
+    // Same floor the in-game resizer enforces.
+    width = std::max(640, width);
+    height = std::max(480, height);
+
+    if (width == g_ConfigManager.GameWindowWidth && height == g_ConfigManager.GameWindowHeight)
+        return;
+
+    g_ConfigManager.GameWindowWidth = width;
+    g_ConfigManager.GameWindowHeight = height;
+
+    // The server tracks the view size for what it sends us.
+    if (g_PacketManager.GetClientVersion() >= CV_200)
+        CPacketGameWindowSize().Send();
+
+    g_GameScreen.UpdateContent();
 }
 //----------------------------------------------------------------------------------
 void COrionWindow::EmulateOnLeftMouseButtonDown()

@@ -130,7 +130,6 @@ bool CGumpProfile::OnLeftMouseButtonDoubleClick()
     return false;
 }
 //----------------------------------------------------------------------------
-#if USE_WISP
 void CGumpProfile::OnCharPress(const WPARAM &wParam, const LPARAM &lParam)
 {
     WISPFUN_DEBUG("c108_f6");
@@ -160,13 +159,18 @@ void CGumpProfile::OnKeyDown(const WPARAM &wParam, const LPARAM &lParam)
             RecalculateHeight();
     }
 }
-#else
+#if !USE_WISP
 void CGumpProfile::OnTextInput(const SDL_TextInputEvent &ev)
 {
-    NOT_IMPLEMENTED; // FIXME
+    // Adapter onto the platform-neutral handler above. VK_* are SDL keycodes
+    // on this platform, so that switch works verbatim.
+    for (const wchar_t ch : DecodeUTF8(ev.text))
+        OnCharPress((WPARAM)ch, 0);
 }
 void CGumpProfile::OnKeyDown(const SDL_KeyboardEvent &ev)
 {
-    NOT_IMPLEMENTED; // FIXME
+    // Adapter onto the platform-neutral handler above. VK_* are SDL keycodes
+    // on this platform, so that switch works verbatim.
+    OnKeyDown((WPARAM)ev.keysym.sym, 0);
 }
 #endif
