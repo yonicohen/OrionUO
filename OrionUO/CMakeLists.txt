@@ -92,6 +92,7 @@ set(glengine_src
   GLEngine/GLTextureCircleOfTransparency.cpp
   GLEngine/GLTexture.cpp
   GLEngine/GLVector.cpp
+  GLEngine/GLVertexBatch.cpp
 )
 
 set(gui_src

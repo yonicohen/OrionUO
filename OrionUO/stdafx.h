@@ -134,6 +134,7 @@ using namespace std;
 #include "GLEngine/GLShader.h"
 #include "GLEngine/GLVector.h"
 #include "GLEngine/GLFrameBuffer.h"
+#include "GLEngine/GLVertexBatch.h"
 #include "GLEngine/GLEngine.h"
 
 #include "Globals.h"
