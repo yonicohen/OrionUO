@@ -215,7 +215,13 @@ public:
     bool GetNoDrawRoofs() { return m_NoDrawRoofs; };
     void SetNoDrawRoofs(bool val);
 
+#ifdef ORION_GLES
+    // GLES has no display lists at all. The option stays settable so the saved
+    // config round-trips, but the renderer must never take that path.
+    bool GetUseGLListsForInterface() { return false; };
+#else
     bool GetUseGLListsForInterface() { return m_UseGLListsForInterface; };
+#endif
     void SetUseGLListsForInterface(bool val);
 
     uchar GetPingTimer() { return m_PingTimer; };

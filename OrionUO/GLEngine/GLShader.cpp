@@ -16,6 +16,79 @@ CColorizerShader g_ColorizerShader;
 CColorizerShader g_FontColorizerShader;
 CColorizerShader g_LightColorizerShader;
 //----------------------------------------------------------------------------------
+#ifdef ORION_GLES
+//----------------------------------------------------------------------------------
+// GLES 1.x has no programmable pipeline, and this path is written against the
+// ARB extension entry points, which GLES does not provide under any name or
+// version. The shaders are stubbed out rather than faked: every caller already
+// copes with Init() failing - Use() returns false and drawing falls back to the
+// fixed function pipeline - so the client renders without hue colorisation
+// instead of not rendering at all.
+//
+// Hues are not cosmetic in UO, so this is a stopgap. Restoring them means a
+// GLES 2.0 renderer, which also has to replace the fixed function matrix stack
+// and the client-side vertex arrays this code still relies on. See docs/ANDROID.md.
+//----------------------------------------------------------------------------------
+void UnuseShader()
+{
+    ShaderColorTable = 0;
+    g_ShaderDrawMode = 0;
+}
+//----------------------------------------------------------------------------------
+CGLShader::CGLShader()
+{
+}
+//----------------------------------------------------------------------------------
+CGLShader::~CGLShader()
+{
+}
+//----------------------------------------------------------------------------------
+bool CGLShader::Init(const char * /*vertexShaderData*/, const char * /*fragmentShaderData*/)
+{
+    return false;
+}
+//----------------------------------------------------------------------------------
+bool CGLShader::Use()
+{
+    UnuseShader();
+    return false;
+}
+//----------------------------------------------------------------------------------
+void CGLShader::Pause()
+{
+}
+//----------------------------------------------------------------------------------
+void CGLShader::Resume()
+{
+}
+//----------------------------------------------------------------------------------
+CDeathShader::CDeathShader()
+    : CGLShader()
+{
+}
+//----------------------------------------------------------------------------------
+bool CDeathShader::Init(const char * /*vertexShaderData*/, const char * /*fragmentShaderData*/)
+{
+    return false;
+}
+//----------------------------------------------------------------------------------
+CColorizerShader::CColorizerShader()
+    : CGLShader()
+{
+}
+//----------------------------------------------------------------------------------
+bool CColorizerShader::Init(const char * /*vertexShaderData*/, const char * /*fragmentShaderData*/)
+{
+    return false;
+}
+//----------------------------------------------------------------------------------
+bool CColorizerShader::Use()
+{
+    return false;
+}
+//----------------------------------------------------------------------------------
+#else
+//----------------------------------------------------------------------------------
 void UnuseShader()
 {
     WISPFUN_DEBUG("c_uns_sdr");
@@ -232,4 +305,7 @@ bool CColorizerShader::Use()
 
     return result;
 }
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+#endif // ORION_GLES
 //----------------------------------------------------------------------------------
