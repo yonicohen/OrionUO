@@ -13,6 +13,12 @@
 void UnuseShader();
 //----------------------------------------------------------------------------------
 //Базовый класс для работы с шейдерами
+#if defined(ORION_GLES)
+// GLES has no ARB shader objects; the shader classes are stubbed out in the
+// .cpp, but the members still need a type that exists.
+typedef GLuint GLhandleARB;
+#endif
+//----------------------------------------------------------------------------------
 class CGLShader
 {
 protected:

@@ -9,15 +9,25 @@
 #include <thread>
 
 #define NO_SDL_GLEXT
+#if defined(ORION_GLES)
+// Android has no desktop GL and no GLEW: GLES needs no extension loader, since
+// the core entry points are exported directly by libGLESv1_CM. GLCompat.h fills
+// in what the renderer still calls that GLES does not have.
+#include <GLES/gl.h>
+#include <GLES/glext.h>
+#else
 #include <GL/glew.h>
 #if defined(ORION_OSX)
 #include <OpenGL/gl.h>
 #else
 #include <GL/gl.h>
 #endif
+#endif
 #include <SDL2/SDL.h>
 #include <zlib.h>
+#if !defined(ORION_GLES)
 #include <FreeImage.h>
+#endif
 
 using namespace std;
 
@@ -76,6 +86,13 @@ using namespace std;
 
 typedef int SOCKET;
 typedef uint16_t WORD;
+#if defined(ORION_GLES)
+// On desktop POSIX builds FreeImage.h supplies this. FreeImage is only used by
+// ScreenshotBuilder, so it is not built for Android, and the type has to come
+// from somewhere.
+typedef uint32_t DWORD;
+typedef int BOOL;
+#endif
 typedef uintptr_t LPARAM;
 typedef uintptr_t LRESULT;
 typedef uintptr_t WPARAM;

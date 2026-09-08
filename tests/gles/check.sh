@@ -44,12 +44,43 @@ sources=(
     "$here/displaylists.cpp"
 )
 
+# The renderer itself needs SDL2 built for Android, because everything above
+# GLEngine includes stdafx.h, which includes SDL. Build it with
+# tools/android-build-sdl2.sh and point ANDROID_SDL2_PREFIX at the result;
+# without it the check still covers the compatibility layer on its own.
+sdl="${ANDROID_SDL2_PREFIX:-$HOME/.cache/orionuo-android/sdl2}"
+client_flags=()
+if [[ -f "$sdl/include/SDL2/SDL.h" ]]; then
+    sources+=("$repo/OrionUO/GLEngine/GLEngine.cpp")
+    client_flags=(
+        -std=c++17
+        -DORION_CMAKE -DORION_POSIX -DUSE_ORIONDLL=0 -DUSE_WISP=0
+        -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS -DNDEBUG
+        -I"$sdl/include" -I"$sdl/include/SDL2"
+        -I"$repo/build"
+        -I"$repo/OrionUO/GameObjects" -I"$repo/OrionUO/GUI" -I"$repo/OrionUO/Gumps"
+        -I"$repo/OrionUO/Managers" -I"$repo/OrionUO/Network"
+        -I"$repo/OrionUO/ScreenStages" -I"$repo/OrionUO/TextEngine"
+        -I"$repo/OrionUO/Utility" -I"$repo/OrionUO/Walker" -I"$repo/OrionUO/Wisp"
+        -I"$repo/OrionUO"
+    )
+else
+    echo "note: no Android SDL2 at $sdl - checking the compat layer only."
+    echo "      run tools/android-build-sdl2.sh to include the renderer."
+    echo
+fi
+
 objs=()
 for src in "${sources[@]}"; do
     obj="$out/$(basename "${src%.cpp}").o"
-    if "$cxx" -c -std=c++14 -O2 -DORION_GLES \
-        -I"$here" -I"$repo/OrionUO/GLEngine" \
-        -o "$obj" "$src" 2>"$out/err.txt"; then
+    # The renderer needs the client's own include set; the compat-layer sources
+    # build against the shim stdafx.h in this directory instead.
+    flags=(-std=c++14 -O2 -DORION_GLES -I"$here" -I"$repo/OrionUO/GLEngine")
+    if [[ "$src" == *"/GLEngine/GLEngine.cpp" ]]; then
+        flags=(-O2 -DORION_GLES "${client_flags[@]}")
+    fi
+
+    if "$cxx" -c "${flags[@]}" -o "$obj" "$src" 2>"$out/err.txt"; then
         printf "  compiled  %s\n" "$(basename "$src")"
         objs+=("$obj")
     else

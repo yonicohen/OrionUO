@@ -28,6 +28,23 @@
 
 #define GL_COMPILE 0x1300
 
+// GLES defines no GLdouble at all, but the renderer stores one scale value as
+// one. Nothing is submitted to GL at double precision, so this is only a type.
+typedef double GLdouble;
+
+// Framebuffers exist in GLES 1.x only under GL_OES_framebuffer_object, with
+// every name suffixed. Availability is checked at runtime in CGLEngine::Install
+// via the extension string, exactly as the desktop build checks GLEW.
+#define glGenFramebuffers glGenFramebuffersOES
+#define glBindFramebuffer glBindFramebufferOES
+#define glDeleteFramebuffers glDeleteFramebuffersOES
+#define glFramebufferTexture2D glFramebufferTexture2DOES
+#define glCheckFramebufferStatus glCheckFramebufferStatusOES
+#define GL_FRAMEBUFFER GL_FRAMEBUFFER_OES
+#define GL_FRAMEBUFFER_BINDING GL_FRAMEBUFFER_BINDING_OES
+#define GL_FRAMEBUFFER_COMPLETE GL_FRAMEBUFFER_COMPLETE_OES
+#define GL_COLOR_ATTACHMENT0 GL_COLOR_ATTACHMENT0_OES
+
 // Display lists do not exist in GLES. Nothing reaches these, because
 // GetUseGLListsForInterface() is compiled to return false; they keep the call
 // sites valid without scattering #ifdefs through the gump code.
@@ -46,6 +63,11 @@ inline void glCallList(GLuint /*list*/)
 }
 inline void glDeleteLists(GLuint /*list*/, GLsizei /*range*/)
 {
+}
+
+inline void glLightModeli(GLenum pname, GLint param)
+{
+    glLightModelf(pname, (GLfloat)param);
 }
 
 // GLES has only the float spellings of the matrix and depth entry points, and

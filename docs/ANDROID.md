@@ -69,18 +69,33 @@ copes with that - `Use()` returns false and drawing falls back to fixed function
 - so the client renders, but **without hue colorisation**. Hues are not cosmetic
 in UO, so this is a stopgap, not a finished state.
 
+**Textures converted.** UO stores 16-bit pixels as ARGB1555 and 32-bit as the
+word `B<<24|G<<16|R<<8|A`, uploaded on desktop with `GL_BGRA` and the `_REV`
+packed types. GLES 1.x has neither `GL_BGRA` nor any `_REV` type, and requires
+the internal format to equal the format. `GL1_BindTexture16` now rotates the
+five-bit fields into `GL_RGBA`/`GL_UNSIGNED_SHORT_5_5_5_1`, and
+`GL1_BindTexture32` unpacks to four bytes explicitly rather than reordering the
+word, which would depend on host endianness.
+
+**The GL2 path is compiled out.** It binds vertex buffer objects with `GL_INT`
+arrays, which GLES does not accept as a vertex array type. It is dead code on
+every platform - `CanUseBuffer` is hardcoded `false` - so it is removed for
+Android rather than ported.
+
 **Cross-compiled and symbol-checked.** `tests/gles/check.sh` builds the GLES
-layer with the NDK for `aarch64-linux-android` against the real Android GLES 1.x
-headers, then checks every GL entry point the objects still reference against the
-`libGLESv1_CM.so` the device ships - so a call that links on the host but does
-not exist on the phone fails here instead of at runtime:
+layer *and the renderer* with the NDK for `aarch64-linux-android` against the
+real Android GLES 1.x headers, then checks every GL entry point the objects
+reference against the `libGLESv1_CM.so` the device ships - so a call that links
+on the host but does not exist on the phone fails here instead of at runtime:
 
 ```bash
+./tools/android-build-sdl2.sh     # once; the renderer's headers need SDL
 ./tests/gles/check.sh
 ```
 
-All 11 symbols currently resolve. This covers the compatibility layer, not yet
-the whole renderer; see step 1 below.
+`GLEngine.cpp` compiles clean for ARM64 and all 42 GL symbols it needs resolve.
+Without the SDL2 build the check still runs, covering the compatibility layer
+alone.
 
 The desktop build is unaffected by all of the above and still builds and renders.
 
@@ -88,10 +103,12 @@ The desktop build is unaffected by all of the above and still builds and renders
 
 Roughly in order:
 
-1. **Cross-compile the whole tree.** `GLVertexBatch.cpp` and the compat layer
-   already build for `aarch64-linux-android` and pass the symbol check. The rest
-   of the tree does not build yet, because it needs SDL2 built for Android
-   first - everything above `GLEngine` includes `stdafx.h`, which pulls in SDL.
+1. **Cross-compile the rest of the tree.** The renderer (`GLEngine.cpp`), the
+   vertex batch and the compat layer all build for `aarch64-linux-android` and
+   pass the symbol check. The other ~200 translation units have not been tried;
+   they are mostly platform-independent game logic, but `ScreenshotBuilder`
+   needs FreeImage, which is not cross-built (it is the only user, so stubbing
+   it is the likely answer), and `SoundBackend` needs SDL_mixer for Android.
 2. **SDL2 Android bootstrap.** SDL supports Android natively; the client needs
    the Java activity, the JNI entry point and a Gradle project around it.
 3. **Asset delivery.** The UO data is ~2.6 GB and cannot be redistributed, so it
@@ -108,9 +125,11 @@ Roughly in order:
 
 ## Caveats
 
-- No Android device or emulator has run this. The GLES layer is compiled and
+- No Android device or emulator has run this. The renderer is compiled and
   symbol-checked for ARM64, but compiling is not running: nothing has drawn a
-  frame on a phone.
+  frame on a phone. The texture conversions in particular are reasoned from the
+  format definitions and verified only by the desktop build still rendering -
+  the GLES paths themselves have never executed.
 - The `0xFACE` handshake, login crypto and networking are platform-independent
   and are already working on macOS, so they are not expected to need changes.
 - UO data files are copyright and must never be bundled in an APK.

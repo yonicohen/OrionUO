@@ -184,6 +184,7 @@ public:
 
     //Функции OpenGL 2x
 
+#if !defined(ORION_GLES)
     void GL2_CreateArrays(CGLTexture &texture, int width, int height);
 
     //Загрузка текстур 16 и 32 бит
@@ -220,6 +221,7 @@ public:
 
     //Нарисовать фон
     void GL2_DrawResizepic(CGLTexture **th, int x, int y, int width, int height);
+#endif // !ORION_GLES
 };
 //---------------------------------------------------------------------------
 extern CGLEngine g_GL;
