@@ -48,14 +48,15 @@ inline void glDeleteLists(GLuint /*list*/, GLsizei /*range*/)
 {
 }
 
-// GLES has only the float spellings of the matrix and depth entry points.
-inline void glClearDepth(GLdouble depth)
+// GLES has only the float spellings of the matrix and depth entry points, and
+// no GLdouble type at all - hence plain double in these signatures.
+inline void glClearDepth(double depth)
 {
     glClearDepthf((GLclampf)depth);
 }
 // GLES has only the float spellings of the matrix and clipping entry points.
 inline void glOrtho(
-    GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble zNear, GLdouble zFar)
+    double left, double right, double bottom, double top, double zNear, double zFar)
 {
     glOrthof(
         (GLfloat)left, (GLfloat)right, (GLfloat)bottom, (GLfloat)top, (GLfloat)zNear,

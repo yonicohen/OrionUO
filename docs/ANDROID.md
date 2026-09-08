@@ -59,6 +59,8 @@ fallback. That getter is compiled to return `false` under `ORION_GLES`, and
 
 **Desktop-only entry points aliased.** `glOrtho` and `glClearDepth` have only
 float spellings in GLES (`glOrthof`, `glClearDepthf`); `GLCompat.h` maps them.
+GLES also has no `GLdouble` type at all, so those shims take plain `double` -
+caught by the cross-compile check below, not by reading the spec.
 
 **Shaders stubbed.** `GLShader.cpp` is written against the ARB extension entry
 points, which GLES does not provide under any name. Under `ORION_GLES` the
@@ -67,15 +69,29 @@ copes with that - `Use()` returns false and drawing falls back to fixed function
 - so the client renders, but **without hue colorisation**. Hues are not cosmetic
 in UO, so this is a stopgap, not a finished state.
 
+**Cross-compiled and symbol-checked.** `tests/gles/check.sh` builds the GLES
+layer with the NDK for `aarch64-linux-android` against the real Android GLES 1.x
+headers, then checks every GL entry point the objects still reference against the
+`libGLESv1_CM.so` the device ships - so a call that links on the host but does
+not exist on the phone fails here instead of at runtime:
+
+```bash
+./tests/gles/check.sh
+```
+
+All 11 symbols currently resolve. This covers the compatibility layer, not yet
+the whole renderer; see step 1 below.
+
 The desktop build is unaffected by all of the above and still builds and renders.
 
 ## Left to do
 
 Roughly in order:
 
-1. **Cross-compile.** Build the tree with the NDK for `arm64-v8a` against GLES.
-   Nothing here has been compiled by an Android toolchain yet - the GLES paths
-   are written but unproven, which is the single biggest caveat in this document.
+1. **Cross-compile the whole tree.** `GLVertexBatch.cpp` and the compat layer
+   already build for `aarch64-linux-android` and pass the symbol check. The rest
+   of the tree does not build yet, because it needs SDL2 built for Android
+   first - everything above `GLEngine` includes `stdafx.h`, which pulls in SDL.
 2. **SDL2 Android bootstrap.** SDL supports Android natively; the client needs
    the Java activity, the JNI entry point and a Gradle project around it.
 3. **Asset delivery.** The UO data is ~2.6 GB and cannot be redistributed, so it
@@ -92,7 +108,9 @@ Roughly in order:
 
 ## Caveats
 
-- No Android device or emulator has run this. Nothing below step 1 is verified.
+- No Android device or emulator has run this. The GLES layer is compiled and
+  symbol-checked for ARM64, but compiling is not running: nothing has drawn a
+  frame on a phone.
 - The `0xFACE` handshake, login crypto and networking are platform-independent
   and are already working on macOS, so they are not expected to need changes.
 - UO data files are copyright and must never be bundled in an APK.
