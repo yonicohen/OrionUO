@@ -1,0 +1,187 @@
+/***********************************************************************************
+**
+** GLVertexBatch.cpp
+**
+** See GLVertexBatch.h.
+**
+************************************************************************************
+*/
+//----------------------------------------------------------------------------------
+#include "stdafx.h"
+//----------------------------------------------------------------------------------
+CGLVertexBatch g_GLBatch;
+//----------------------------------------------------------------------------------
+void CGLVertexBatch::Reserve()
+{
+    // Almost every batch is a four-vertex quad; the circle is the outlier at
+    // 362. Reserving once keeps these off the allocator entirely.
+    m_Positions.reserve(768);
+    m_TexCoords.reserve(768);
+    m_Colors.reserve(1536);
+    m_Normals.reserve(1152);
+}
+//----------------------------------------------------------------------------------
+void CGLVertexBatch::Begin(GLenum mode, bool textured)
+{
+    m_Mode = mode;
+    m_Textured = textured;
+    m_Colored = false;
+    m_Normaled = false;
+
+    m_Positions.clear();
+    m_TexCoords.clear();
+    m_Colors.clear();
+    m_Normals.clear();
+
+    m_CurrentTexCoord[0] = 0.0f;
+    m_CurrentTexCoord[1] = 0.0f;
+}
+//----------------------------------------------------------------------------------
+void CGLVertexBatch::SeedColorsFromGL()
+{
+    // Vertices emitted before the first Color() call inherited whatever glColor
+    // state was current, so read it back and give them that, rather than letting
+    // the new colour apply retroactively to the whole batch.
+    GLfloat current[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    glGetFloatv(GL_CURRENT_COLOR, current);
+
+    const size_t emitted = m_Positions.size() / 2;
+    m_Colors.clear();
+    m_Colors.reserve((emitted + 1) * 4);
+
+    for (size_t i = 0; i < emitted; i++)
+    {
+        m_Colors.push_back(current[0]);
+        m_Colors.push_back(current[1]);
+        m_Colors.push_back(current[2]);
+        m_Colors.push_back(current[3]);
+    }
+}
+//----------------------------------------------------------------------------------
+void CGLVertexBatch::SeedNormalsFromGL()
+{
+    GLfloat current[3] = { 0.0f, 0.0f, 1.0f };
+    glGetFloatv(GL_CURRENT_NORMAL, current);
+
+    const size_t emitted = m_Positions.size() / 2;
+    m_Normals.clear();
+    m_Normals.reserve((emitted + 1) * 3);
+
+    for (size_t i = 0; i < emitted; i++)
+    {
+        m_Normals.push_back(current[0]);
+        m_Normals.push_back(current[1]);
+        m_Normals.push_back(current[2]);
+    }
+}
+//----------------------------------------------------------------------------------
+void CGLVertexBatch::TexCoord(float u, float v)
+{
+    m_CurrentTexCoord[0] = u;
+    m_CurrentTexCoord[1] = v;
+}
+//----------------------------------------------------------------------------------
+void CGLVertexBatch::Color(float r, float g, float b, float a)
+{
+    if (!m_Colored)
+    {
+        m_Colored = true;
+        SeedColorsFromGL();
+    }
+
+    m_CurrentColor[0] = r;
+    m_CurrentColor[1] = g;
+    m_CurrentColor[2] = b;
+    m_CurrentColor[3] = a;
+}
+//----------------------------------------------------------------------------------
+void CGLVertexBatch::Normal(float x, float y, float z)
+{
+    if (!m_Normaled)
+    {
+        m_Normaled = true;
+        SeedNormalsFromGL();
+    }
+
+    m_CurrentNormal[0] = x;
+    m_CurrentNormal[1] = y;
+    m_CurrentNormal[2] = z;
+}
+//----------------------------------------------------------------------------------
+void CGLVertexBatch::Vertex(float x, float y)
+{
+    m_Positions.push_back(x);
+    m_Positions.push_back(y);
+
+    if (m_Textured)
+    {
+        m_TexCoords.push_back(m_CurrentTexCoord[0]);
+        m_TexCoords.push_back(m_CurrentTexCoord[1]);
+    }
+
+    if (m_Colored)
+    {
+        m_Colors.push_back(m_CurrentColor[0]);
+        m_Colors.push_back(m_CurrentColor[1]);
+        m_Colors.push_back(m_CurrentColor[2]);
+        m_Colors.push_back(m_CurrentColor[3]);
+    }
+
+    if (m_Normaled)
+    {
+        m_Normals.push_back(m_CurrentNormal[0]);
+        m_Normals.push_back(m_CurrentNormal[1]);
+        m_Normals.push_back(m_CurrentNormal[2]);
+    }
+}
+//----------------------------------------------------------------------------------
+void CGLVertexBatch::End()
+{
+    const int count = (int)(m_Positions.size() / 2);
+    if (count == 0)
+        return;
+
+    glEnableClientState(GL_VERTEX_ARRAY);
+    glVertexPointer(2, GL_FLOAT, 0, &m_Positions[0]);
+
+    const bool useTexCoords = m_Textured && (int)(m_TexCoords.size() / 2) == count;
+    if (useTexCoords)
+    {
+        glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+        glTexCoordPointer(2, GL_FLOAT, 0, &m_TexCoords[0]);
+    }
+
+    const bool useColors = m_Colored && (int)(m_Colors.size() / 4) == count;
+    if (useColors)
+    {
+        glEnableClientState(GL_COLOR_ARRAY);
+        glColorPointer(4, GL_FLOAT, 0, &m_Colors[0]);
+    }
+
+    const bool useNormals = m_Normaled && (int)(m_Normals.size() / 3) == count;
+    if (useNormals)
+    {
+        glEnableClientState(GL_NORMAL_ARRAY);
+        glNormalPointer(GL_FLOAT, 0, &m_Normals[0]);
+    }
+
+    glDrawArrays(m_Mode, 0, count);
+
+    if (useNormals)
+        glDisableClientState(GL_NORMAL_ARRAY);
+
+    if (useColors)
+    {
+        glDisableClientState(GL_COLOR_ARRAY);
+        // A colour array overwrites the current colour on some drivers; put the
+        // caller's colour back so the next draw is not tinted by ours.
+        glColor4f(
+            m_CurrentColor[0], m_CurrentColor[1], m_CurrentColor[2], m_CurrentColor[3]);
+    }
+
+    if (useTexCoords)
+        glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+
+    glDisableClientState(GL_VERTEX_ARRAY);
+}
+//----------------------------------------------------------------------------------
