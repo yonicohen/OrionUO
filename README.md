@@ -17,6 +17,9 @@ binary, which matters for one protocol handshake (see [Known gaps](#known-gaps))
 Verified working against a live Sphere 0.56b shard: login, character creation,
 world rendering, movement, sound, text input, vendors and gump interaction.
 
+> **Just want to play?** [INSTRUCTIONS.md](INSTRUCTIONS.md) is a step-by-step
+> setup guide for the Ignis UO shard, including troubleshooting and controls.
+
 ---
 
 ## Getting the code
