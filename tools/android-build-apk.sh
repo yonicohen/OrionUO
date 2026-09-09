@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+#
+# Packages the client as an installable APK.
+#
+#   ./tools/android-build-deps.sh    # once: SDL2 and SDL2_mixer for arm64
+#   ./tools/android-build.sh         # libmain.so
+#   ./tools/android-build-apk.sh     # this
+#
+# Uses aapt2/d8/apksigner directly rather than Gradle, so the only Java needed
+# is a JDK - no Gradle download, no wrapper, no daemon.
+#
+# The APK contains the client and SDL, but NOT the UO data: those files are
+# copyright, cannot be redistributed, and are ~2.6 GB. They have to be pushed to
+# the device separately. See docs/ANDROID.md.
+#
+set -euo pipefail
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+sdk="${ANDROID_SDK:-$HOME/.cache/orionuo-android/sdk}"
+prefix="${ANDROID_SDL2_PREFIX:-$HOME/.cache/orionuo-android/sdl2}"
+ndk="${ANDROID_NDK:-/opt/homebrew/share/android-ndk}"
+buildtools_version="${ANDROID_BUILD_TOOLS:-34.0.0}"
+platform_version="${ANDROID_PLATFORM_VERSION:-android-34}"
+abi="arm64-v8a"
+out="${OUT:-$repo/build-android/apk}"
+lib="$repo/build-android/libmain.so"
+
+bt="$sdk/build-tools/$buildtools_version"
+android_jar="$sdk/platforms/$platform_version/android.jar"
+
+for needed in "$bt/aapt2" "$bt/d8" "$bt/apksigner" "$bt/zipalign" "$android_jar"; do
+    if [[ ! -e "$needed" ]]; then
+        echo "error: missing $needed" >&2
+        echo "install with: sdkmanager --sdk_root=$sdk 'platforms;$platform_version' 'build-tools;$buildtools_version'" >&2
+        exit 2
+    fi
+done
+if [[ ! -f "$lib" ]]; then
+    echo "error: $lib not built - run tools/android-build.sh first" >&2
+    exit 2
+fi
+
+# Android's d8 crashes on class files from very new JDKs, so prefer a 17 if one
+# is installed. Override with JAVA_HOME if you have a different one.
+if [[ -z "${JAVA_HOME:-}" ]]; then
+    for candidate in /opt/homebrew/opt/openjdk@17 /opt/homebrew/opt/openjdk@21 \
+                     /usr/libexec/java_home /opt/homebrew/opt/openjdk; do
+        [[ -x "$candidate/bin/javac" ]] && { JAVA_HOME="$candidate"; break; }
+    done
+fi
+export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk}"
+export PATH="$JAVA_HOME/bin:$PATH"
+
+rm -rf "$out"
+mkdir -p "$out"/{classes,res,dex,lib/$abi}
+
+echo "compiling java"
+find "$repo/android/java" -name '*.java' > "$out/sources.txt"
+# android.jar goes on the classpath, not the bootclasspath: the SDL sources use
+# lambdas, and android.jar has no LambdaMetafactory. d8 desugars them afterwards,
+# which is what Gradle does too.
+javac -nowarn -source 11 -target 11 \
+    -classpath "$android_jar" -d "$out/classes" @"$out/sources.txt" 2>&1 |
+    grep -v "bootstrap class path\|source value\|target value\|deprecat" || true
+
+if ! find "$out/classes" -name '*.class' | grep -q .; then
+    echo "error: javac produced no classes" >&2
+    exit 1
+fi
+
+echo "dexing"
+"$bt/d8" --min-api 21 --lib "$android_jar" --output "$out/dex" \
+    $(find "$out/classes" -name '*.class') >/dev/null
+
+echo "compiling resources"
+"$bt/aapt2" compile --dir "$repo/android/res" -o "$out/res.zip" >/dev/null
+
+echo "linking apk"
+"$bt/aapt2" link \
+    -I "$android_jar" \
+    --manifest "$repo/android/AndroidManifest.xml" \
+    -o "$out/base.apk" \
+    "$out/res.zip" >/dev/null
+
+# The native libraries go in lib/<abi>/. libc++_shared comes from the NDK, and
+# is what every one of these was built against.
+cp "$lib" "$out/lib/$abi/"
+cp "$prefix/lib/libSDL2.so" "$prefix/lib/libSDL2_mixer.so" "$out/lib/$abi/"
+host="$(ls "$ndk/toolchains/llvm/prebuilt" | head -1)"
+cp "$ndk/toolchains/llvm/prebuilt/$host/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" \
+    "$out/lib/$abi/"
+
+echo "packaging"
+cd "$out"
+cp base.apk unsigned.apk
+cp dex/classes.dex .
+zip -q -u unsigned.apk classes.dex
+zip -q -r unsigned.apk lib
+"$bt/zipalign" -f 4 unsigned.apk aligned.apk
+
+# A debug keystore is enough to install; this is not a release signing key.
+keystore="$HOME/.cache/orionuo-android/debug.keystore"
+if [[ ! -f "$keystore" ]]; then
+    mkdir -p "$(dirname "$keystore")"
+    keytool -genkeypair -keystore "$keystore" -storepass android -keypass android \
+        -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+        -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
+fi
+
+"$bt/apksigner" sign --ks "$keystore" --ks-pass pass:android --key-pass pass:android \
+    --out "$out/orionuo.apk" aligned.apk
+"$bt/apksigner" verify "$out/orionuo.apk" && echo "signature verified"
+
+rm -f base.apk unsigned.apk aligned.apk
+echo
+ls -lh "$out/orionuo.apk"
+echo
+echo "install with:  adb install -r $out/orionuo.apk"
+echo "the UO data still has to be pushed separately - see docs/ANDROID.md"

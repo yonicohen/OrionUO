@@ -92,7 +92,21 @@ it.
 ```bash
 ./tools/android-build-deps.sh     # once: cross-builds SDL2 and SDL2_mixer
 ./tools/android-build.sh          # compiles, links, checks symbols
+./tools/android-build-apk.sh      # packages and signs an installable APK
 ```
+
+**It packages as an APK.** `tools/android-build-apk.sh` produces a signed 5.8 MB
+`orionuo.apk` containing `libmain.so`, SDL2, SDL2_mixer and `libc++_shared.so`
+for `arm64-v8a`. It drives `aapt2`, `d8` and `apksigner` directly rather than
+going through Gradle, so the only thing needed besides the SDK is a JDK. Note
+that Android's `d8` crashes on class files from very new JDKs; the script prefers
+a JDK 17 if one is installed.
+
+`android/` holds the Java side: SDL's `org.libsdl.app` classes and an
+`OrionActivity` that names the libraries to load. No JNI shim was needed -
+`OrionMain.cpp` includes `SDL.h`, which includes `SDL_main.h`, which redefines
+`main` to `SDL_main` on platforms where SDL owns the entry point, so
+`libmain.so` already exports exactly the symbol `SDLActivity` looks up.
 
 `tests/gles/check.sh` is the narrower, faster check: it builds just the
 compatibility layer and the renderer and verifies their GL entry points against
@@ -110,9 +124,9 @@ The desktop build is unaffected by all of the above and still builds and renders
 
 Roughly in order:
 
-1. **Package it as an APK.** `libmain.so` exists but nothing loads it. SDL
-   supports Android natively; what is missing is the Java activity, the JNI
-   entry point and a Gradle project, plus deciding how `main()` is reached.
+1. **Run it.** The APK builds and signs, but has never been installed. No
+   device or emulator has been tried, so the first launch is entirely unknown -
+   expect it to fail on the data path before anything renders.
 2. **Asset delivery.** The UO data is ~2.6 GB and cannot be redistributed, so it
    cannot ship in the APK. It has to be side-loaded to external storage and
    located at runtime, replacing the `CustomPath` lookup in `uo_debug.cfg`.
