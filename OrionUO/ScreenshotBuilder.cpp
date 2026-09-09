@@ -1,4 +1,4 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+﻿// This is an open source non-commercial project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 /***********************************************************************************
 **
@@ -28,6 +28,19 @@ void CScreenshotBuilder::SaveScreen()
     SaveScreen(0, 0, g_OrionWindow.GetSize().Width, g_OrionWindow.GetSize().Height);
 }
 //---------------------------------------------------------------------------
+#if defined(ORION_GLES)
+// Screenshots go through FreeImage, which is the only thing in the client that
+// uses it and is not cross-built for Android. Saving is skipped rather than
+// reimplemented; nothing else depends on it.
+void CScreenshotBuilder::SaveScreen(int x, int y, int width, int height)
+{
+    UNUSED(x);
+    UNUSED(y);
+    UNUSED(width);
+    UNUSED(height);
+    LOG("Screenshots are not available on this build.\n");
+}
+#else
 void CScreenshotBuilder::SaveScreen(int x, int y, int width, int height)
 {
     WISPFUN_DEBUG("c204_f2");
@@ -94,12 +107,33 @@ void CScreenshotBuilder::SaveScreen(int x, int y, int width, int height)
     if (g_GameState >= GS_GAME)
         g_Orion.CreateTextMessageF(3, 0, "Screenshot saved to: %s", CStringFromPath(path));
 }
+#endif
 //---------------------------------------------------------------------------
 UINT_LIST CScreenshotBuilder::GetScenePixels(int x, int y, int width, int height)
 {
     WISPFUN_DEBUG("c204_f3");
     UINT_LIST pixels(width * height);
 
+#if defined(ORION_GLES)
+    // GLES guarantees only GL_RGBA/GL_UNSIGNED_BYTE for glReadPixels, so read
+    // bytes and pack them into the ARGB words the caller expects, rather than
+    // relying on BGRA with a _REV type.
+    std::vector<uchar> raw((size_t)width * height * 4);
+    glReadPixels(
+        x,
+        g_OrionWindow.GetSize().Height - y - height,
+        width,
+        height,
+        GL_RGBA,
+        GL_UNSIGNED_BYTE,
+        &raw[0]);
+
+    for (size_t i = 0; i < pixels.size(); i++)
+    {
+        pixels[i] = ((uint)raw[i * 4 + 0] << 16) | ((uint)raw[i * 4 + 1] << 8) |
+                    (uint)raw[i * 4 + 2];
+    }
+#else
     glReadPixels(
         x,
         g_OrionWindow.GetSize().Height - y - height,
@@ -108,6 +142,7 @@ UINT_LIST CScreenshotBuilder::GetScenePixels(int x, int y, int width, int height
         GL_BGRA,
         GL_UNSIGNED_INT_8_8_8_8_REV,
         &pixels[0]);
+#endif
 
     for (uint &i : pixels)
         i |= 0xFF000000;

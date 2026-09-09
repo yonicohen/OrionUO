@@ -82,20 +82,27 @@ arrays, which GLES does not accept as a vertex array type. It is dead code on
 every platform - `CanUseBuffer` is hardcoded `false` - so it is removed for
 Android rather than ported.
 
-**Cross-compiled and symbol-checked.** `tests/gles/check.sh` builds the GLES
-layer *and the renderer* with the NDK for `aarch64-linux-android` against the
-real Android GLES 1.x headers, then checks every GL entry point the objects
-reference against the `libGLESv1_CM.so` the device ships - so a call that links
-on the host but does not exist on the phone fails here instead of at runtime:
+**The whole client cross-compiles and links.** All 247 translation units build
+for `aarch64-linux-android`, and they link into a 3.0 MB `libmain.so` against
+SDL2, SDL2_mixer, GLES 1.x, EGL, zlib and the NDK runtime. Every one of the 360
+symbols the library still needs is provided by something it links against, so a
+missing entry point fails at build time rather than when the phone tries to load
+it.
 
 ```bash
-./tools/android-build-sdl2.sh     # once; the renderer's headers need SDL
-./tests/gles/check.sh
+./tools/android-build-deps.sh     # once: cross-builds SDL2 and SDL2_mixer
+./tools/android-build.sh          # compiles, links, checks symbols
 ```
 
-`GLEngine.cpp` compiles clean for ARM64 and all 42 GL symbols it needs resolve.
-Without the SDL2 build the check still runs, covering the compatibility layer
-alone.
+`tests/gles/check.sh` is the narrower, faster check: it builds just the
+compatibility layer and the renderer and verifies their GL entry points against
+the device's `libGLESv1_CM.so`. It runs without the SDL2 build too, covering the
+compat layer alone.
+
+A few things had to give way to get there. FreeImage is not cross-built - it is
+used only by `ScreenshotBuilder`, so screenshots are stubbed out on Android.
+SDL2_mixer is built without FluidSynth, which is not available cross-compiled,
+so MIDI goes through the bundled timidity.
 
 The desktop build is unaffected by all of the above and still builds and renders.
 
@@ -103,33 +110,28 @@ The desktop build is unaffected by all of the above and still builds and renders
 
 Roughly in order:
 
-1. **Cross-compile the rest of the tree.** The renderer (`GLEngine.cpp`), the
-   vertex batch and the compat layer all build for `aarch64-linux-android` and
-   pass the symbol check. The other ~200 translation units have not been tried;
-   they are mostly platform-independent game logic, but `ScreenshotBuilder`
-   needs FreeImage, which is not cross-built (it is the only user, so stubbing
-   it is the likely answer), and `SoundBackend` needs SDL_mixer for Android.
-2. **SDL2 Android bootstrap.** SDL supports Android natively; the client needs
-   the Java activity, the JNI entry point and a Gradle project around it.
-3. **Asset delivery.** The UO data is ~2.6 GB and cannot be redistributed, so it
+1. **Package it as an APK.** `libmain.so` exists but nothing loads it. SDL
+   supports Android natively; what is missing is the Java activity, the JNI
+   entry point and a Gradle project, plus deciding how `main()` is reached.
+2. **Asset delivery.** The UO data is ~2.6 GB and cannot be redistributed, so it
    cannot ship in the APK. It has to be side-loaded to external storage and
    located at runtime, replacing the `CustomPath` lookup in `uo_debug.cfg`.
-4. **Touch input.** The client assumes a mouse with two buttons and a keyboard.
+3. **Touch input.** The client assumes a mouse with two buttons and a keyboard.
    Movement is right-button-hold, targeting is left-click, and there is no
    on-screen keyboard handling. This is a design problem, not a porting one.
-5. **Hues, via a GLES 2.0 renderer.** Replaces the fixed function matrix stack
+4. **Hues, via a GLES 2.0 renderer.** Replaces the fixed function matrix stack
    and client-side vertex arrays as well, since GLES 2.0 has neither. This is
    the largest remaining piece.
-6. **Sound.** `SoundBackend.cpp` uses SDL_mixer, which builds for Android, so
-   this is expected to be mostly a build-system matter.
+5. **Sound on device.** `SoundBackend.cpp` and SDL2_mixer both build for
+   Android, but no audio has been played.
 
 ## Caveats
 
-- No Android device or emulator has run this. The renderer is compiled and
-  symbol-checked for ARM64, but compiling is not running: nothing has drawn a
-  frame on a phone. The texture conversions in particular are reasoned from the
-  format definitions and verified only by the desktop build still rendering -
-  the GLES paths themselves have never executed.
+- No Android device or emulator has run this. The client compiles, links and
+  resolves every symbol for ARM64, but linking is not running: nothing has drawn
+  a frame on a phone. The texture conversions in particular are reasoned from
+  the format definitions and verified only by the desktop build still rendering
+  - the GLES paths themselves have never executed.
 - The `0xFACE` handshake, login crypto and networking are platform-independent
   and are already working on macOS, so they are not expected to need changes.
 - UO data files are copyright and must never be bundled in an APK.

@@ -44,6 +44,18 @@ typedef double GLdouble;
 #define GL_FRAMEBUFFER_BINDING GL_FRAMEBUFFER_BINDING_OES
 #define GL_FRAMEBUFFER_COMPLETE GL_FRAMEBUFFER_COMPLETE_OES
 #define GL_COLOR_ATTACHMENT0 GL_COLOR_ATTACHMENT0_OES
+#define glGenerateMipmap glGenerateMipmapOES
+
+// Blend equations are GL_OES_blend_subtract in GLES 1.x, again all suffixed.
+#define glBlendEquation glBlendEquationOES
+#define GL_FUNC_ADD GL_FUNC_ADD_OES
+#define GL_FUNC_REVERSE_SUBTRACT GL_FUNC_REVERSE_SUBTRACT_OES
+
+// GLES has no sized internal formats and no BGRA. The framebuffer's colour
+// texture is allocated with a null pixel pointer, so only the enums matter.
+#define GL_RGBA8 GL_RGBA
+#define GL_BGRA GL_RGBA
+#define GL_UNSIGNED_INT_8_8_8_8 GL_UNSIGNED_BYTE
 
 // Display lists do not exist in GLES. Nothing reaches these, because
 // GetUseGLListsForInterface() is compiled to return false; they keep the call
@@ -62,6 +74,17 @@ inline void glCallList(GLuint /*list*/)
 {
 }
 inline void glDeleteLists(GLuint /*list*/, GLsizei /*range*/)
+{
+}
+
+// The shader classes are stubbed out under GLES (see GLShader.cpp), but the
+// uniform calls are scattered through the GUI drawing code. These make them
+// inert rather than #ifdef'ing every call site; with no program bound there is
+// no uniform to set.
+inline void glUniform1iARB(GLint /*location*/, GLint /*v0*/)
+{
+}
+inline void glUniform1fv(GLint /*location*/, GLsizei /*count*/, const GLfloat * /*value*/)
 {
 }
 

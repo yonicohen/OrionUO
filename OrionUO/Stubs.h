@@ -14,6 +14,9 @@
 // the core entry points are exported directly by libGLESv1_CM. GLCompat.h fills
 // in what the renderer still calls that GLES does not have.
 #include <GLES/gl.h>
+// Without this glext.h declares the extension enums but not their entry points,
+// so glBindFramebufferOES and friends come out as undeclared identifiers.
+#define GL_GLEXT_PROTOTYPES 1
 #include <GLES/glext.h>
 #else
 #include <GL/glew.h>
@@ -92,6 +95,12 @@ typedef uint16_t WORD;
 // from somewhere.
 typedef uint32_t DWORD;
 typedef int BOOL;
+#if !defined(TRUE)
+#define TRUE 1
+#endif
+#if !defined(FALSE)
+#define FALSE 0
+#endif
 #endif
 typedef uintptr_t LPARAM;
 typedef uintptr_t LRESULT;
