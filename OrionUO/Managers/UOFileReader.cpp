@@ -26,15 +26,20 @@ USHORT_LIST UOFileReader::GetGumpPixels(CIndexObject &io)
     size_t dataStart = io.Address;
     puint lookupList = (puint)dataStart;
 
-    int blocksize = io.Width * io.Height;
-
     USHORT_LIST pixels;
 
-    if (!blocksize)
+    // The dimensions come from the gump index, so they are only as trustworthy
+    // as the data files. Multiplying them can overflow int and come out
+    // negative, and resize() reads a negative size as an enormous unsigned one
+    // and throws std::length_error, which nothing here catches - the client just
+    // aborts. Bound each side the way ReadArt already bounds its own.
+    if (io.Width <= 0 || io.Height <= 0 || io.Width > 4096 || io.Height > 4096)
     {
         LOG("UOFileReader::GetGumpPixels bad size:%i, %i\n", io.Width, io.Height);
         return pixels;
     }
+
+    const int blocksize = io.Width * io.Height;
 
     pixels.resize(blocksize);
 

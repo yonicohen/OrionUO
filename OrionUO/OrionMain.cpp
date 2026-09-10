@@ -1,4 +1,5 @@
 ﻿#include "stdafx.h"
+#include <exception>
 
 #include "FileSystem.h"
 #include <SDL.h>
@@ -71,9 +72,38 @@ extern ENCRYPTION_TYPE g_EncryptionType;
 
 extern COrionWindow g_OrionWindow;
 
+// Uncaught exceptions abort the process with nothing but 'terminating due to
+// uncaught exception' on the terminal, which tells a player nothing and tells us
+// less. Log what was thrown first; the log is line buffered, so it survives the
+// abort that follows.
+static void OnTerminate()
+{
+    if (std::exception_ptr current = std::current_exception())
+    {
+        try
+        {
+            std::rethrow_exception(current);
+        }
+        catch (const std::exception &e)
+        {
+            LOG("FATAL: uncaught exception: %s\n", e.what());
+        }
+        catch (...)
+        {
+            LOG("FATAL: uncaught exception of unknown type\n");
+        }
+    }
+    else
+        LOG("FATAL: terminate called without an active exception\n");
+
+    fflush(stdout);
+    abort();
+}
+//----------------------------------------------------------------------------------
 int main(int argc, char **argv)
 {
     WISPFUN_DEBUG();
+    std::set_terminate(OnTerminate);
 
     // LOG() is fprintf(stdout, ...) here. Redirected to a file, stdout is block
     // buffered, so up to 8 KB of output - which can be minutes of a session, and
