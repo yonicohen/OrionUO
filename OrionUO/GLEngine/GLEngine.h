@@ -153,6 +153,10 @@ public:
 
     inline void BindTexture(GLuint texture);
 
+    // Binds and records the source dimensions, which the shader needs in order
+    // to filter magnified pixel art by texel rather than by screen pixel.
+    inline void BindTexture(const CGLTexture &texture);
+
     //Нарисовать линию
     void DrawLine(int x, int y, int targetX, int targetY);
 

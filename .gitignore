@@ -67,3 +67,7 @@ build/
 build-debug/
 Client.cuo
 uo_debug.cfg
+
+# vertexbatch equivalence test binary
+tests/vertexbatch/vertexbatch-test
+tests/vertexbatch/*.dSYM/

@@ -215,6 +215,13 @@ bool CGLEngine::Install()
 
     glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_FALSE);
 
+    // Build the shader pipeline that CGLVertexBatch can draw through. It is the
+    // path a Core profile or GLES 2.0 will require; drawing through it now, in a
+    // context that still has the fixed function pipeline, is what makes the two
+    // comparable. Falling back costs nothing if the driver refuses it.
+    g_GLBatch.UseShaders = g_GLBatchShader.Init();
+    LOG("Vertex batch path: %s\n", g_GLBatch.UseShaders ? "shader + vertex buffer" : "fixed function arrays");
+
     ViewPort(0, 0, g_OrionWindow.GetSize().Width, g_OrionWindow.GetSize().Height);
 
     return true;
@@ -650,15 +657,21 @@ inline void CGLEngine::BindTexture(GLuint texture)
     }
 }
 //----------------------------------------------------------------------------------
+inline void CGLEngine::BindTexture(const CGLTexture &texture)
+{
+    BindTexture(texture.Texture);
+    g_GLBatch.SetSourceSize(texture.Width, texture.Height);
+}
+//----------------------------------------------------------------------------------
 void CGLEngine::DrawLine(int x, int y, int targetX, int targetY)
 {
     WISPFUN_DEBUG("c29_f26");
     glDisable(GL_TEXTURE_2D);
 
-    glBegin(GL_LINES);
-    glVertex2i(x, y);
-    glVertex2i(targetX, targetY);
-    glEnd();
+    g_GLBatch.Begin(GL_LINES, false);
+    g_GLBatch.Vertex(x, y);
+    g_GLBatch.Vertex(targetX, targetY);
+    g_GLBatch.End();
 
     glEnable(GL_TEXTURE_2D);
 }
@@ -670,12 +683,12 @@ void CGLEngine::DrawPolygone(int x, int y, int width, int height)
 
     glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
 
-    glBegin(GL_TRIANGLE_STRIP);
-    glVertex2i(0, height);
-    glVertex2i(width, height);
-    glVertex2i(0, 0);
-    glVertex2i(width, 0);
-    glEnd();
+    g_GLBatch.Begin(GL_TRIANGLE_STRIP, false);
+    g_GLBatch.Vertex(0, height);
+    g_GLBatch.Vertex(width, height);
+    g_GLBatch.Vertex(0, 0);
+    g_GLBatch.Vertex(width, 0);
+    g_GLBatch.End();
 
     glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
 
@@ -689,22 +702,22 @@ void CGLEngine::DrawCircle(float x, float y, float radius, int gradientMode)
 
     glTranslatef(x, y, 0.0f);
 
-    glBegin(GL_TRIANGLE_FAN);
+    g_GLBatch.Begin(GL_TRIANGLE_FAN, false);
 
-    glVertex2i(0, 0);
+    g_GLBatch.Vertex(0, 0);
 
     if (gradientMode)
-        glColor4f(0.0f, 0.0f, 0.0f, 0.0f);
+        g_GLBatch.Color(0.0f, 0.0f, 0.0f, 0.0f);
 
     float pi = (float)M_PI * 2.0f;
 
     for (int i = 0; i <= 360; i++)
     {
         float a = (i / 180.0f) * pi;
-        glVertex2f(cos(a) * radius, sin(a) * radius);
+        g_GLBatch.Vertex(cos(a) * radius, sin(a) * radius);
     }
 
-    glEnd();
+    g_GLBatch.End();
 
     glTranslatef(-x, -y, 0.0f);
 
@@ -714,7 +727,7 @@ void CGLEngine::DrawCircle(float x, float y, float radius, int gradientMode)
 void CGLEngine::GL1_DrawLandTexture(const CGLTexture &texture, int x, int y, CLandObject *land)
 {
     WISPFUN_DEBUG("c29_f29");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     float translateX = x - 22.0f;
     float translateY = y - 22.0f;
@@ -724,23 +737,23 @@ void CGLEngine::GL1_DrawLandTexture(const CGLTexture &texture, int x, int y, CLa
 
     glTranslatef(translateX, translateY, 0.0f);
 
-    glBegin(GL_TRIANGLE_STRIP);
-    glNormal3f((GLfloat)normals[0].X, (GLfloat)normals[0].Y, (GLfloat)normals[0].Z);
-    glTexCoord2i(0, 0);
-    glVertex2i(22, -rc.left); //^
+    g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
+    g_GLBatch.Normal((GLfloat)normals[0].X, (GLfloat)normals[0].Y, (GLfloat)normals[0].Z);
+    g_GLBatch.TexCoord(0, 0);
+    g_GLBatch.Vertex(22, -rc.left); //^
 
-    glNormal3f((GLfloat)normals[3].X, (GLfloat)normals[3].Y, (GLfloat)normals[3].Z);
-    glTexCoord2i(0, 1);
-    glVertex2i(0, 22 - rc.top); //<
+    g_GLBatch.Normal((GLfloat)normals[3].X, (GLfloat)normals[3].Y, (GLfloat)normals[3].Z);
+    g_GLBatch.TexCoord(0, 1);
+    g_GLBatch.Vertex(0, 22 - rc.top); //<
 
-    glNormal3f((GLfloat)normals[1].X, (GLfloat)normals[1].Y, (GLfloat)normals[1].Z);
-    glTexCoord2i(1, 0);
-    glVertex2i(44, 22 - rc.bottom); //>
+    g_GLBatch.Normal((GLfloat)normals[1].X, (GLfloat)normals[1].Y, (GLfloat)normals[1].Z);
+    g_GLBatch.TexCoord(1, 0);
+    g_GLBatch.Vertex(44, 22 - rc.bottom); //>
 
-    glNormal3f((GLfloat)normals[2].X, (GLfloat)normals[2].Y, (GLfloat)normals[2].Z);
-    glTexCoord2i(1, 1);
-    glVertex2i(22, 44 - rc.right); //v
-    glEnd();
+    g_GLBatch.Normal((GLfloat)normals[2].X, (GLfloat)normals[2].Y, (GLfloat)normals[2].Z);
+    g_GLBatch.TexCoord(1, 1);
+    g_GLBatch.Vertex(22, 44 - rc.right); //v
+    g_GLBatch.End();
 
     glTranslatef(-translateX, -translateY, 0.0f);
 }
@@ -748,23 +761,23 @@ void CGLEngine::GL1_DrawLandTexture(const CGLTexture &texture, int x, int y, CLa
 void CGLEngine::GL1_Draw(const CGLTexture &texture, int x, int y)
 {
     WISPFUN_DEBUG("c29_f30");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
 
     glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
 
-    glBegin(GL_TRIANGLE_STRIP);
-    glTexCoord2i(0, 1);
-    glVertex2i(0, height);
-    glTexCoord2i(1, 1);
-    glVertex2i(width, height);
-    glTexCoord2i(0, 0);
-    glVertex2i(0, 0);
-    glTexCoord2i(1, 0);
-    glVertex2i(width, 0);
-    glEnd();
+    g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
+    g_GLBatch.TexCoord(0, 1);
+    g_GLBatch.Vertex(0, height);
+    g_GLBatch.TexCoord(1, 1);
+    g_GLBatch.Vertex(width, height);
+    g_GLBatch.TexCoord(0, 0);
+    g_GLBatch.Vertex(0, 0);
+    g_GLBatch.TexCoord(1, 0);
+    g_GLBatch.Vertex(width, 0);
+    g_GLBatch.End();
 
     glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
@@ -772,7 +785,7 @@ void CGLEngine::GL1_Draw(const CGLTexture &texture, int x, int y)
 void CGLEngine::GL1_DrawRotated(const CGLTexture &texture, int x, int y, float angle)
 {
     WISPFUN_DEBUG("c29_f31");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
@@ -783,16 +796,16 @@ void CGLEngine::GL1_DrawRotated(const CGLTexture &texture, int x, int y, float a
 
     glRotatef(angle, 0.0f, 0.0f, 1.0f);
 
-    glBegin(GL_TRIANGLE_STRIP);
-    glTexCoord2i(0, 1);
-    glVertex2i(0, height);
-    glTexCoord2i(1, 1);
-    glVertex2i(width, height);
-    glTexCoord2i(0, 0);
-    glVertex2i(0, 0);
-    glTexCoord2i(1, 0);
-    glVertex2i(width, 0);
-    glEnd();
+    g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
+    g_GLBatch.TexCoord(0, 1);
+    g_GLBatch.Vertex(0, height);
+    g_GLBatch.TexCoord(1, 1);
+    g_GLBatch.Vertex(width, height);
+    g_GLBatch.TexCoord(0, 0);
+    g_GLBatch.Vertex(0, 0);
+    g_GLBatch.TexCoord(1, 0);
+    g_GLBatch.Vertex(width, 0);
+    g_GLBatch.End();
 
     glRotatef(angle, 0.0f, 0.0f, -1.0f);
     glTranslatef((GLfloat)-x, -translateY, 0.0f);
@@ -801,39 +814,39 @@ void CGLEngine::GL1_DrawRotated(const CGLTexture &texture, int x, int y, float a
 void CGLEngine::GL1_DrawMirrored(const CGLTexture &texture, int x, int y, bool mirror)
 {
     WISPFUN_DEBUG("c29_f32");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
 
     glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
 
-    glBegin(GL_TRIANGLE_STRIP);
+    g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
 
     if (mirror)
     {
-        glTexCoord2i(0, 1);
-        glVertex2i(width, height);
-        glTexCoord2i(1, 1);
-        glVertex2i(0, height);
-        glTexCoord2i(0, 0);
-        glVertex2i(width, 0);
-        glTexCoord2i(1, 0);
-        glVertex2i(0, 0);
+        g_GLBatch.TexCoord(0, 1);
+        g_GLBatch.Vertex(width, height);
+        g_GLBatch.TexCoord(1, 1);
+        g_GLBatch.Vertex(0, height);
+        g_GLBatch.TexCoord(0, 0);
+        g_GLBatch.Vertex(width, 0);
+        g_GLBatch.TexCoord(1, 0);
+        g_GLBatch.Vertex(0, 0);
     }
     else
     {
-        glTexCoord2i(0, 1);
-        glVertex2i(0, height);
-        glTexCoord2i(1, 1);
-        glVertex2i(width, height);
-        glTexCoord2i(0, 0);
-        glVertex2i(0, 0);
-        glTexCoord2i(1, 0);
-        glVertex2i(width, 0);
+        g_GLBatch.TexCoord(0, 1);
+        g_GLBatch.Vertex(0, height);
+        g_GLBatch.TexCoord(1, 1);
+        g_GLBatch.Vertex(width, height);
+        g_GLBatch.TexCoord(0, 0);
+        g_GLBatch.Vertex(0, 0);
+        g_GLBatch.TexCoord(1, 0);
+        g_GLBatch.Vertex(width, 0);
     }
 
-    glEnd();
+    g_GLBatch.End();
 
     glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
@@ -842,7 +855,7 @@ void CGLEngine::GL1_DrawSitting(
     const CGLTexture &texture, int x, int y, bool mirror, float h3mod, float h6mod, float h9mod)
 {
     WISPFUN_DEBUG("c29_f33");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
 
@@ -854,102 +867,102 @@ void CGLEngine::GL1_DrawSitting(
     float h09 = height * h9mod;
 
     float widthOffset = (float)(width + SittingCharacterOffset);
-    glBegin(GL_TRIANGLE_STRIP);
+    g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
 
     if (mirror)
     {
         if (h3mod)
         {
-            glTexCoord2f(0.0f, 0.0f);
-            glVertex2f(width, 0);
-            glTexCoord2f(1.0f, 0.0f);
-            glVertex2f(0, 0);
-            glTexCoord2f(0.0f, h3mod);
-            glVertex2f(width, h03);
-            glTexCoord2f(1.0f, h3mod);
-            glVertex2f(0, h03);
+            g_GLBatch.TexCoord(0.0f, 0.0f);
+            g_GLBatch.Vertex(width, 0);
+            g_GLBatch.TexCoord(1.0f, 0.0f);
+            g_GLBatch.Vertex(0, 0);
+            g_GLBatch.TexCoord(0.0f, h3mod);
+            g_GLBatch.Vertex(width, h03);
+            g_GLBatch.TexCoord(1.0f, h3mod);
+            g_GLBatch.Vertex(0, h03);
         }
 
         if (h6mod)
         {
             if (!h3mod)
             {
-                glTexCoord2f(0.0f, 0.0f);
-                glVertex2f(width, 0);
-                glTexCoord2f(1.0f, 0.0f);
-                glVertex2f(0, 0);
+                g_GLBatch.TexCoord(0.0f, 0.0f);
+                g_GLBatch.Vertex(width, 0);
+                g_GLBatch.TexCoord(1.0f, 0.0f);
+                g_GLBatch.Vertex(0, 0);
             }
 
-            glTexCoord2f(0.0f, h6mod);
-            glVertex2f(widthOffset, h06);
-            glTexCoord2f(1.0f, h6mod);
-            glVertex2f(SittingCharacterOffset, h06);
+            g_GLBatch.TexCoord(0.0f, h6mod);
+            g_GLBatch.Vertex(widthOffset, h06);
+            g_GLBatch.TexCoord(1.0f, h6mod);
+            g_GLBatch.Vertex(SittingCharacterOffset, h06);
         }
 
         if (h9mod)
         {
             if (!h6mod)
             {
-                glTexCoord2f(0.0f, 0.0f);
-                glVertex2f(widthOffset, 0);
-                glTexCoord2f(1.0f, 0.0f);
-                glVertex2f(SittingCharacterOffset, 0);
+                g_GLBatch.TexCoord(0.0f, 0.0f);
+                g_GLBatch.Vertex(widthOffset, 0);
+                g_GLBatch.TexCoord(1.0f, 0.0f);
+                g_GLBatch.Vertex(SittingCharacterOffset, 0);
             }
 
-            glTexCoord2f(0.0f, 1.0f);
-            glVertex2f(widthOffset, h09);
-            glTexCoord2f(1.0f, 1.0f);
-            glVertex2f(SittingCharacterOffset, h09);
+            g_GLBatch.TexCoord(0.0f, 1.0f);
+            g_GLBatch.Vertex(widthOffset, h09);
+            g_GLBatch.TexCoord(1.0f, 1.0f);
+            g_GLBatch.Vertex(SittingCharacterOffset, h09);
         }
     }
     else
     {
         if (h3mod)
         {
-            glTexCoord2f(0.0f, 0.0f);
-            glVertex2f(SittingCharacterOffset, 0);
-            glTexCoord2f(1.0f, 0.0f);
-            glVertex2f(widthOffset, 0);
-            glTexCoord2f(0.0f, h3mod);
-            glVertex2f(SittingCharacterOffset, h03);
-            glTexCoord2f(1.0f, h3mod);
-            glVertex2f(widthOffset, h03);
+            g_GLBatch.TexCoord(0.0f, 0.0f);
+            g_GLBatch.Vertex(SittingCharacterOffset, 0);
+            g_GLBatch.TexCoord(1.0f, 0.0f);
+            g_GLBatch.Vertex(widthOffset, 0);
+            g_GLBatch.TexCoord(0.0f, h3mod);
+            g_GLBatch.Vertex(SittingCharacterOffset, h03);
+            g_GLBatch.TexCoord(1.0f, h3mod);
+            g_GLBatch.Vertex(widthOffset, h03);
         }
 
         if (h6mod)
         {
             if (!h3mod)
             {
-                glTexCoord2f(0.0f, 0.0f);
-                glVertex2f(SittingCharacterOffset, 0);
-                glTexCoord2f(1.0f, 0.0f);
-                glVertex2f(width + SittingCharacterOffset, 0);
+                g_GLBatch.TexCoord(0.0f, 0.0f);
+                g_GLBatch.Vertex(SittingCharacterOffset, 0);
+                g_GLBatch.TexCoord(1.0f, 0.0f);
+                g_GLBatch.Vertex(width + SittingCharacterOffset, 0);
             }
 
-            glTexCoord2f(0.0f, h6mod);
-            glVertex2f(0, h06);
-            glTexCoord2f(1.0f, h6mod);
-            glVertex2f(width, h06);
+            g_GLBatch.TexCoord(0.0f, h6mod);
+            g_GLBatch.Vertex(0, h06);
+            g_GLBatch.TexCoord(1.0f, h6mod);
+            g_GLBatch.Vertex(width, h06);
         }
 
         if (h9mod)
         {
             if (!h6mod)
             {
-                glTexCoord2f(0.0f, 0.0f);
-                glVertex2f(0, 0);
-                glTexCoord2f(1.0f, 0.0f);
-                glVertex2f(width, 0);
+                g_GLBatch.TexCoord(0.0f, 0.0f);
+                g_GLBatch.Vertex(0, 0);
+                g_GLBatch.TexCoord(1.0f, 0.0f);
+                g_GLBatch.Vertex(width, 0);
             }
 
-            glTexCoord2f(0.0f, 1.0f);
-            glVertex2f(0, h09);
-            glTexCoord2f(1.0f, 1.0f);
-            glVertex2f(width, h09);
+            g_GLBatch.TexCoord(0.0f, 1.0f);
+            g_GLBatch.Vertex(0, h09);
+            g_GLBatch.TexCoord(1.0f, 1.0f);
+            g_GLBatch.Vertex(width, h09);
         }
     }
 
-    glEnd();
+    g_GLBatch.End();
 
     glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
@@ -957,7 +970,7 @@ void CGLEngine::GL1_DrawSitting(
 void CGLEngine::GL1_DrawShadow(const CGLTexture &texture, int x, int y, bool mirror)
 {
     WISPFUN_DEBUG("c29_f34");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     float width = (float)texture.Width;
     float height = texture.Height / 2.0f;
@@ -966,34 +979,34 @@ void CGLEngine::GL1_DrawShadow(const CGLTexture &texture, int x, int y, bool mir
 
     glTranslatef((GLfloat)x, translateY, 0.0f);
 
-    glBegin(GL_TRIANGLE_STRIP);
+    g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
 
     float ratio = height / width;
 
     if (mirror)
     {
-        glTexCoord2f(0, 1);
-        glVertex2f(width, height);
-        glTexCoord2f(1, 1);
-        glVertex2f(0, height);
-        glTexCoord2f(0, 0);
-        glVertex2f(width * (ratio + 1.0f), 0);
-        glTexCoord2f(1, 0);
-        glVertex2f(width * ratio, 0);
+        g_GLBatch.TexCoord(0, 1);
+        g_GLBatch.Vertex(width, height);
+        g_GLBatch.TexCoord(1, 1);
+        g_GLBatch.Vertex(0, height);
+        g_GLBatch.TexCoord(0, 0);
+        g_GLBatch.Vertex(width * (ratio + 1.0f), 0);
+        g_GLBatch.TexCoord(1, 0);
+        g_GLBatch.Vertex(width * ratio, 0);
     }
     else
     {
-        glTexCoord2f(0, 1);
-        glVertex2f(0, height);
-        glTexCoord2f(1, 1);
-        glVertex2f(width, height);
-        glTexCoord2f(0, 0);
-        glVertex2f(width * ratio, 0);
-        glTexCoord2f(1, 0);
-        glVertex2f(width * (ratio + 1.0f), 0);
+        g_GLBatch.TexCoord(0, 1);
+        g_GLBatch.Vertex(0, height);
+        g_GLBatch.TexCoord(1, 1);
+        g_GLBatch.Vertex(width, height);
+        g_GLBatch.TexCoord(0, 0);
+        g_GLBatch.Vertex(width * ratio, 0);
+        g_GLBatch.TexCoord(1, 0);
+        g_GLBatch.Vertex(width * (ratio + 1.0f), 0);
     }
 
-    glEnd();
+    g_GLBatch.End();
 
     glTranslatef((GLfloat)-x, -translateY, 0.0f);
 }
@@ -1002,7 +1015,7 @@ void CGLEngine::GL1_DrawStretched(
     const CGLTexture &texture, int x, int y, int drawWidth, int drawHeight)
 {
     WISPFUN_DEBUG("c29_f35");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
@@ -1012,16 +1025,16 @@ void CGLEngine::GL1_DrawStretched(
     float drawCountX = drawWidth / (float)width;
     float drawCountY = drawHeight / (float)height;
 
-    glBegin(GL_TRIANGLE_STRIP);
-    glTexCoord2f(0.0f, drawCountY);
-    glVertex2i(0, drawHeight);
-    glTexCoord2f(drawCountX, drawCountY);
-    glVertex2i(drawWidth, drawHeight);
-    glTexCoord2f(0.0f, 0.0f);
-    glVertex2i(0, 0);
-    glTexCoord2f(drawCountX, 0.0f);
-    glVertex2i(drawWidth, 0);
-    glEnd();
+    g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
+    g_GLBatch.TexCoord(0.0f, drawCountY);
+    g_GLBatch.Vertex(0, drawHeight);
+    g_GLBatch.TexCoord(drawCountX, drawCountY);
+    g_GLBatch.Vertex(drawWidth, drawHeight);
+    g_GLBatch.TexCoord(0.0f, 0.0f);
+    g_GLBatch.Vertex(0, 0);
+    g_GLBatch.TexCoord(drawCountX, 0.0f);
+    g_GLBatch.Vertex(drawWidth, 0);
+    g_GLBatch.End();
 
     glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
@@ -1134,16 +1147,16 @@ void CGLEngine::GL1_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
 
         glTranslatef((GLfloat)drawX, (GLfloat)drawY, 0.0f);
 
-        glBegin(GL_TRIANGLE_STRIP);
-        glTexCoord2f(0.0f, drawCountY);
-        glVertex2i(0, drawHeight);
-        glTexCoord2f(drawCountX, drawCountY);
-        glVertex2i(drawWidth, drawHeight);
-        glTexCoord2f(0.0f, 0.0f);
-        glVertex2i(0, 0);
-        glTexCoord2f(drawCountX, 0.0f);
-        glVertex2i(drawWidth, 0);
-        glEnd();
+        g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
+        g_GLBatch.TexCoord(0.0f, drawCountY);
+        g_GLBatch.Vertex(0, drawHeight);
+        g_GLBatch.TexCoord(drawCountX, drawCountY);
+        g_GLBatch.Vertex(drawWidth, drawHeight);
+        g_GLBatch.TexCoord(0.0f, 0.0f);
+        g_GLBatch.Vertex(0, 0);
+        g_GLBatch.TexCoord(drawCountX, 0.0f);
+        g_GLBatch.Vertex(drawWidth, 0);
+        g_GLBatch.End();
 
         glTranslatef((GLfloat)-drawX, (GLfloat)-drawY, 0.0f);
     }
@@ -1153,7 +1166,7 @@ void CGLEngine::GL1_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
 void CGLEngine::GL2_DrawLandTexture(const CGLTexture &texture, int x, int y, CLandObject *land)
 {
     WISPFUN_DEBUG("c29_f37");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     float translateX = x - 22.0f;
     float translateY = y - 22.0f;
@@ -1181,7 +1194,7 @@ void CGLEngine::GL2_DrawLandTexture(const CGLTexture &texture, int x, int y, CLa
 void CGLEngine::GL2_Draw(const CGLTexture &texture, int x, int y)
 {
     WISPFUN_DEBUG("c29_f38");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
@@ -1202,7 +1215,7 @@ void CGLEngine::GL2_Draw(const CGLTexture &texture, int x, int y)
 void CGLEngine::GL2_DrawRotated(const CGLTexture &texture, int x, int y, float angle)
 {
     WISPFUN_DEBUG("c29_f39");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
@@ -1228,7 +1241,7 @@ void CGLEngine::GL2_DrawRotated(const CGLTexture &texture, int x, int y, float a
 void CGLEngine::GL2_DrawMirrored(const CGLTexture &texture, int x, int y, bool mirror)
 {
     WISPFUN_DEBUG("c29_f40");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
@@ -1254,7 +1267,7 @@ void CGLEngine::GL2_DrawSitting(
     const CGLTexture &texture, int x, int y, bool mirror, float h3mod, float h6mod, float h9mod)
 {
     WISPFUN_DEBUG("c29_f41");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
 
@@ -1266,102 +1279,102 @@ void CGLEngine::GL2_DrawSitting(
     float h09 = height * h9mod;
 
     float widthOffset = (float)(width + SittingCharacterOffset);
-    glBegin(GL_TRIANGLE_STRIP);
+    g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
 
     if (mirror)
     {
         if (h3mod)
         {
-            glTexCoord2f(0.0f, 0.0f);
-            glVertex2f(width, 0);
-            glTexCoord2f(1.0f, 0.0f);
-            glVertex2f(0, 0);
-            glTexCoord2f(0.0f, h3mod);
-            glVertex2f(width, h03);
-            glTexCoord2f(1.0f, h3mod);
-            glVertex2f(0, h03);
+            g_GLBatch.TexCoord(0.0f, 0.0f);
+            g_GLBatch.Vertex(width, 0);
+            g_GLBatch.TexCoord(1.0f, 0.0f);
+            g_GLBatch.Vertex(0, 0);
+            g_GLBatch.TexCoord(0.0f, h3mod);
+            g_GLBatch.Vertex(width, h03);
+            g_GLBatch.TexCoord(1.0f, h3mod);
+            g_GLBatch.Vertex(0, h03);
         }
 
         if (h6mod)
         {
             if (!h3mod)
             {
-                glTexCoord2f(0.0f, 0.0f);
-                glVertex2f(width, 0);
-                glTexCoord2f(1.0f, 0.0f);
-                glVertex2f(0, 0);
+                g_GLBatch.TexCoord(0.0f, 0.0f);
+                g_GLBatch.Vertex(width, 0);
+                g_GLBatch.TexCoord(1.0f, 0.0f);
+                g_GLBatch.Vertex(0, 0);
             }
 
-            glTexCoord2f(0.0f, h6mod);
-            glVertex2f(widthOffset, h06);
-            glTexCoord2f(1.0f, h6mod);
-            glVertex2f(SittingCharacterOffset, h06);
+            g_GLBatch.TexCoord(0.0f, h6mod);
+            g_GLBatch.Vertex(widthOffset, h06);
+            g_GLBatch.TexCoord(1.0f, h6mod);
+            g_GLBatch.Vertex(SittingCharacterOffset, h06);
         }
 
         if (h9mod)
         {
             if (!h6mod)
             {
-                glTexCoord2f(0.0f, 0.0f);
-                glVertex2f(widthOffset, 0);
-                glTexCoord2f(1.0f, 0.0f);
-                glVertex2f(SittingCharacterOffset, 0);
+                g_GLBatch.TexCoord(0.0f, 0.0f);
+                g_GLBatch.Vertex(widthOffset, 0);
+                g_GLBatch.TexCoord(1.0f, 0.0f);
+                g_GLBatch.Vertex(SittingCharacterOffset, 0);
             }
 
-            glTexCoord2f(0.0f, 1.0f);
-            glVertex2f(widthOffset, h09);
-            glTexCoord2f(1.0f, 1.0f);
-            glVertex2f(SittingCharacterOffset, h09);
+            g_GLBatch.TexCoord(0.0f, 1.0f);
+            g_GLBatch.Vertex(widthOffset, h09);
+            g_GLBatch.TexCoord(1.0f, 1.0f);
+            g_GLBatch.Vertex(SittingCharacterOffset, h09);
         }
     }
     else
     {
         if (h3mod)
         {
-            glTexCoord2f(0.0f, 0.0f);
-            glVertex2f(SittingCharacterOffset, 0);
-            glTexCoord2f(1.0f, 0.0f);
-            glVertex2f(widthOffset, 0);
-            glTexCoord2f(0.0f, h3mod);
-            glVertex2f(SittingCharacterOffset, h03);
-            glTexCoord2f(1.0f, h3mod);
-            glVertex2f(widthOffset, h03);
+            g_GLBatch.TexCoord(0.0f, 0.0f);
+            g_GLBatch.Vertex(SittingCharacterOffset, 0);
+            g_GLBatch.TexCoord(1.0f, 0.0f);
+            g_GLBatch.Vertex(widthOffset, 0);
+            g_GLBatch.TexCoord(0.0f, h3mod);
+            g_GLBatch.Vertex(SittingCharacterOffset, h03);
+            g_GLBatch.TexCoord(1.0f, h3mod);
+            g_GLBatch.Vertex(widthOffset, h03);
         }
 
         if (h6mod)
         {
             if (!h3mod)
             {
-                glTexCoord2f(0.0f, 0.0f);
-                glVertex2f(SittingCharacterOffset, 0);
-                glTexCoord2f(1.0f, 0.0f);
-                glVertex2f(width + SittingCharacterOffset, 0);
+                g_GLBatch.TexCoord(0.0f, 0.0f);
+                g_GLBatch.Vertex(SittingCharacterOffset, 0);
+                g_GLBatch.TexCoord(1.0f, 0.0f);
+                g_GLBatch.Vertex(width + SittingCharacterOffset, 0);
             }
 
-            glTexCoord2f(0.0f, h6mod);
-            glVertex2f(0, h06);
-            glTexCoord2f(1.0f, h6mod);
-            glVertex2f(width, h06);
+            g_GLBatch.TexCoord(0.0f, h6mod);
+            g_GLBatch.Vertex(0, h06);
+            g_GLBatch.TexCoord(1.0f, h6mod);
+            g_GLBatch.Vertex(width, h06);
         }
 
         if (h9mod)
         {
             if (!h6mod)
             {
-                glTexCoord2f(0.0f, 0.0f);
-                glVertex2f(0, 0);
-                glTexCoord2f(1.0f, 0.0f);
-                glVertex2f(width, 0);
+                g_GLBatch.TexCoord(0.0f, 0.0f);
+                g_GLBatch.Vertex(0, 0);
+                g_GLBatch.TexCoord(1.0f, 0.0f);
+                g_GLBatch.Vertex(width, 0);
             }
 
-            glTexCoord2f(0.0f, 1.0f);
-            glVertex2f(0, h09);
-            glTexCoord2f(1.0f, 1.0f);
-            glVertex2f(width, h09);
+            g_GLBatch.TexCoord(0.0f, 1.0f);
+            g_GLBatch.Vertex(0, h09);
+            g_GLBatch.TexCoord(1.0f, 1.0f);
+            g_GLBatch.Vertex(width, h09);
         }
     }
 
-    glEnd();
+    g_GLBatch.End();
 
     glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
@@ -1369,7 +1382,7 @@ void CGLEngine::GL2_DrawSitting(
 void CGLEngine::GL2_DrawShadow(const CGLTexture &texture, int x, int y, bool mirror)
 {
     WISPFUN_DEBUG("c29_f42");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     float width = (float)texture.Width;
     float height = texture.Height / 2.0f;
@@ -1419,7 +1432,7 @@ void CGLEngine::GL2_DrawStretched(
     const CGLTexture &texture, int x, int y, int drawWidth, int drawHeight)
 {
     WISPFUN_DEBUG("c29_f43");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
@@ -1429,16 +1442,16 @@ void CGLEngine::GL2_DrawStretched(
     float drawCountX = drawWidth / (float)width;
     float drawCountY = drawHeight / (float)height;
 
-    glBegin(GL_TRIANGLE_STRIP);
-    glTexCoord2f(0.0f, drawCountY);
-    glVertex2i(0, drawHeight);
-    glTexCoord2f(drawCountX, drawCountY);
-    glVertex2i(drawWidth, drawHeight);
-    glTexCoord2f(0.0f, 0.0f);
-    glVertex2i(0, 0);
-    glTexCoord2f(drawCountX, 0.0f);
-    glVertex2i(drawWidth, 0);
-    glEnd();
+    g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
+    g_GLBatch.TexCoord(0.0f, drawCountY);
+    g_GLBatch.Vertex(0, drawHeight);
+    g_GLBatch.TexCoord(drawCountX, drawCountY);
+    g_GLBatch.Vertex(drawWidth, drawHeight);
+    g_GLBatch.TexCoord(0.0f, 0.0f);
+    g_GLBatch.Vertex(0, 0);
+    g_GLBatch.TexCoord(drawCountX, 0.0f);
+    g_GLBatch.Vertex(drawWidth, 0);
+    g_GLBatch.End();
 
     glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
@@ -1543,16 +1556,16 @@ void CGLEngine::GL2_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
 
         glTranslatef((GLfloat)drawX, (GLfloat)drawY, 0.0f);
 
-        glBegin(GL_TRIANGLE_STRIP);
-        glTexCoord2f(0.0f, drawCountY);
-        glVertex2i(0, drawHeight);
-        glTexCoord2f(drawCountX, drawCountY);
-        glVertex2i(drawWidth, drawHeight);
-        glTexCoord2f(0.0f, 0.0f);
-        glVertex2i(0, 0);
-        glTexCoord2f(drawCountX, 0.0f);
-        glVertex2i(drawWidth, 0);
-        glEnd();
+        g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
+        g_GLBatch.TexCoord(0.0f, drawCountY);
+        g_GLBatch.Vertex(0, drawHeight);
+        g_GLBatch.TexCoord(drawCountX, drawCountY);
+        g_GLBatch.Vertex(drawWidth, drawHeight);
+        g_GLBatch.TexCoord(0.0f, 0.0f);
+        g_GLBatch.Vertex(0, 0);
+        g_GLBatch.TexCoord(drawCountX, 0.0f);
+        g_GLBatch.Vertex(drawWidth, 0);
+        g_GLBatch.End();
 
         glTranslatef((GLfloat)-drawX, (GLfloat)-drawY, 0.0f);
     }
