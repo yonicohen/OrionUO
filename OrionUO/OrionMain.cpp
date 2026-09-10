@@ -127,6 +127,8 @@ int main(int argc, char **argv)
             g_UpscaleArt = false;
         else if (!strcmp(argv[i], "--smoothfilter"))
             g_SharpFilter = false;
+        else if (!strcmp(argv[i], "--gridcontainers"))
+            g_ForceGridContainers = true;
     }
 
     if (SDL_Init(SDL_INIT_TIMER) < 0)

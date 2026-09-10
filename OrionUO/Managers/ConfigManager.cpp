@@ -10,6 +10,8 @@
 */
 //----------------------------------------------------------------------------------
 #include "stdafx.h"
+
+bool g_ForceGridContainers = false;
 #include "FileSystem.h"
 //----------------------------------------------------------------------------------
 CConfigManager g_ConfigManager;

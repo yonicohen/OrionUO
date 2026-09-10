@@ -11,6 +11,10 @@
 #define CONFIGMANAGER_H
 //----------------------------------------------------------------------------------
 //!Класс менеджера конфига
+// Set by --gridcontainers, so the layout can be tried before there is any UI
+// for it and without a saved profile.
+extern bool g_ForceGridContainers;
+//----------------------------------------------------------------------------------
 class CConfigManager
 {
 protected:
@@ -38,6 +42,7 @@ protected:
     bool m_UseGlobalMapLayer = false;
     bool m_NoDrawRoofs = false;
     bool m_UseGLListsForInterface = false;
+    bool m_UseGridContainers = false;
     uchar m_PingTimer = 10;
     uchar m_ItemPropertiesMode = OPM_FOLLOW_MOUSE;
     bool m_ItemPropertiesIcon = false;
@@ -216,6 +221,11 @@ public:
     void SetNoDrawRoofs(bool val);
 
     bool GetUseGLListsForInterface() { return m_UseGLListsForInterface; };
+
+    // Lays container contents out in fixed cells instead of at the free
+    // coordinates the server sends for each item.
+    bool GetUseGridContainers() { return m_UseGridContainers || g_ForceGridContainers; };
+    void SetUseGridContainers(bool val) { m_UseGridContainers = val; };
     void SetUseGLListsForInterface(bool val);
 
     uchar GetPingTimer() { return m_PingTimer; };
