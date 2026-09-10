@@ -1,4 +1,4 @@
-#include "Stubs.h"
+﻿#include "Stubs.h"
 
 #if !defined(ORION_WINDOWS)
 
@@ -167,7 +167,22 @@ bool SetWindowPos(void *, void *, int x, int y, int width, int height, int)
         return false;
 
     if (width > 0 && height > 0)
-        SDL_SetWindowSize(g_Window, width, height);
+    {
+        // Same reasoning as CWindow::SetSize: a no-op resize still animates.
+        int currentWidth = 0;
+        int currentHeight = 0;
+        SDL_GetWindowSize(g_Window, &currentWidth, &currentHeight);
+
+        if (currentWidth != width || currentHeight != height)
+        {
+            LOG("Window resize (config): %dx%d -> %dx%d\n",
+                currentWidth,
+                currentHeight,
+                width,
+                height);
+            SDL_SetWindowSize(g_Window, width, height);
+        }
+    }
 
     SDL_SetWindowPosition(g_Window, x, y);
     return true;
@@ -187,13 +202,26 @@ bool SendMessage(void *, int message, int wParam, int)
     if (message != WM_SYSCOMMAND)
         return false;
 
+    // Both callers restore and then immediately maximize, which on Windows is a
+    // single state change but here is two animated resizes that net to nothing.
+    // Only act when the window is not already in the requested state.
+    const bool maximized = (SDL_GetWindowFlags(g_Window) & SDL_WINDOW_MAXIMIZED) != 0;
+
     switch (wParam)
     {
         case SC_MAXIMIZE:
-            SDL_MaximizeWindow(g_Window);
+            if (!maximized)
+            {
+                LOG("Window maximize\n");
+                SDL_MaximizeWindow(g_Window);
+            }
             return true;
         case SC_RESTORE:
-            SDL_RestoreWindow(g_Window);
+            if (maximized)
+            {
+                LOG("Window restore\n");
+                SDL_RestoreWindow(g_Window);
+            }
             return true;
         default:
             return false;

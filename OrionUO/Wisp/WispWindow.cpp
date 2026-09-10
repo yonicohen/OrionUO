@@ -53,8 +53,26 @@ void CWindow::SetSize(const WISP_GEOMETRY::CSize &size)
     SetWindowPos(Handle, HWND_TOP, pos.left, pos.top, r.right, r.bottom, 0);
 #else
     // SDL sizes windows by client area, so there is no frame to account for.
+    //
+    // Skip the call when nothing changes: every SDL_SetWindowSize is a visible,
+    // animated resize on macOS, and the screen transitions ask for the same size
+    // repeatedly.
     if (m_window != nullptr)
-        SDL_SetWindowSize(m_window, size.Width, size.Height);
+    {
+        int currentWidth = 0;
+        int currentHeight = 0;
+        SDL_GetWindowSize(m_window, &currentWidth, &currentHeight);
+
+        if (currentWidth != size.Width || currentHeight != size.Height)
+        {
+            LOG("Window resize: %dx%d -> %dx%d\n",
+                currentWidth,
+                currentHeight,
+                size.Width,
+                size.Height);
+            SDL_SetWindowSize(m_window, size.Width, size.Height);
+        }
+    }
 #endif
     m_Size = size;
 }

@@ -1746,7 +1746,9 @@ void COrion::LoadLocalConfig(int serial)
 
                     if (g_GameState >= GS_GAME)
                     {
-                        SendMessage(g_OrionWindow.Handle, WM_SYSCOMMAND, SC_RESTORE, 0);
+                        // Restoring first and then maximizing is two visible, animated window
+                        // changes here that net to nothing. Only restore when we are actually
+                        // going to set an explicit size.
                         SendMessage(g_OrionWindow.Handle, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
                     }
                 }
