@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 
 #include "FileSystem.h"
 #include <SDL.h>
@@ -94,6 +94,33 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
     SDL_Log("SDL Initialized.");
+
+#if defined(__ANDROID__)
+    // Android starts the process at '/', so the working directory that
+    // CApplication picked up is useless. Point it at app-specific external
+    // storage instead: it needs no runtime permission and is where 'adb push'
+    // can place the UO data, which cannot ship in the APK.
+    //
+    // This has to happen here and not in CApplication's constructor. That
+    // constructor runs while dlopen maps the library, which is before
+    // SDLActivity.nativeSetupJNI() has cached its method IDs, so calling into
+    // SDL's JNI glue that early aborts the process with 'mid == null'.
+    if (const char *androidStorage = SDL_AndroidGetExternalStoragePath())
+    {
+        g_App.m_UOPath = g_App.m_ExePath = os_path(androidStorage);
+        g_MainScreen.LoadCustomPath();
+
+        // LOG() is fprintf(stdout, ...) in this build and Android discards
+        // stdout, so point it at a file next to the data. Line buffering keeps
+        // the log useful if the process is killed rather than exiting.
+        const string logPath = StringFromPath(g_App.ExeFilePath("uolog.txt"));
+        if (freopen(logPath.c_str(), "w", stdout) != nullptr)
+        {
+            setvbuf(stdout, nullptr, _IOLBF, 0);
+            dup2(fileno(stdout), fileno(stderr));
+        }
+    }
+#endif
 
     INITLOGGER("uolog.txt");
     auto path = g_App.ExeFilePath("crashlogs");

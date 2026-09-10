@@ -15,19 +15,7 @@ CApplication::CApplication()
     g_MainThread = CThread::GetCurrentThreadId();
     WISPFUN_DEBUG("c1_f1");
     g_WispApplication = this;
-#if defined(__ANDROID__)
-    // Android has no useful working directory - the process starts at '/' - so
-    // fall back to app-specific external storage. It needs no runtime permission
-    // and is where 'adb push' can place the UO data, which cannot be bundled in
-    // the APK because it is copyright and about 2.6 GB.
-    const char *androidStorage = SDL_AndroidGetExternalStoragePath();
-    if (androidStorage != nullptr)
-        m_UOPath = m_ExePath = os_path(androidStorage);
-    else
-        m_UOPath = m_ExePath = fs_path_current();
-#else
     m_UOPath = m_ExePath = fs_path_current();
-#endif
     g_MainScreen.LoadCustomPath();
 }
 //----------------------------------------------------------------------------------
