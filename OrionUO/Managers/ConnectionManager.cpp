@@ -92,29 +92,55 @@ void CConnectionManager::Init()
         return;
 
     m_IsLoginSocket = true;
+
+    // The seed is the first thing the server sees, and it uses it as the session
+    // key for the login handshake. It is traditionally the client's own IP.
+    //
+    // Resolving your own hostname fails on plenty of machines - on macOS the
+    // .local name has no DNS record, so gethostbyname() returns NULL - and the
+    // old code simply skipped the assignment when it did. m_Seed has no
+    // initialiser, so the client then sent whatever was in that memory. Usually
+    // that is zero, which servers hang up on without replying; occasionally it
+    // is non-zero garbage that works. That made the failure look intermittent
+    // and made it appear to depend on the build rather than the machine.
+    //
+    // Fall back to a non-zero value instead: the server treats the seed as
+    // opaque, so any will do, and sending a wrong-but-valid one beats sending
+    // nothing.
+    uchar seed[4] = {};
+    bool haveSeed = false;
+
     char hostName[1024] = { 0 };
-    //Получим ключик для логин крипта
     if (!gethostname(hostName, sizeof(hostName)))
     {
         if (LPHOSTENT lphost = gethostbyname(hostName))
         {
-            WISP_DATASTREAM::CDataWritter stream;
 #if defined(ORION_POSIX)
-            // h_addr_list[0] is the raw 4-byte address, not a dotted-decimal
-            // string. The previous code fed it to inet_aton and wrote that
-            // function's 0/1 success code as the login seed.
-            in_addr address = {};
+            // h_addr_list[0] is the raw 4-byte address, in network order, not a
+            // dotted-decimal string. The original code fed it to inet_aton and
+            // wrote that function's 0/1 success code as the seed.
             if (lphost->h_addr_list != nullptr && lphost->h_addr_list[0] != nullptr)
-                memcpy(&address, lphost->h_addr_list[0], sizeof(address));
-            stream.WriteUInt32BE(address.s_addr);
+                memcpy(&seed[0], lphost->h_addr_list[0], 4);
 #else
-            stream.WriteUInt32BE(((LPIN_ADDR)lphost->h_addr)->s_addr);
+            memcpy(&seed[0], &((LPIN_ADDR)lphost->h_addr)->s_addr, 4);
 #endif
-            const auto data = stream.DataPtr(); // TODO: check me
-            memcpy(&m_Seed[0], data, 4);
-            g_NetworkInit(true, data);
+            haveSeed = (seed[0] != 0 || seed[1] != 0 || seed[2] != 0 || seed[3] != 0);
         }
     }
+
+    if (!haveSeed)
+    {
+        const uint fallback = (uint)time(nullptr) | 0x01000000;
+        seed[0] = (uchar)(fallback >> 24);
+        seed[1] = (uchar)(fallback >> 16);
+        seed[2] = (uchar)(fallback >> 8);
+        seed[3] = (uchar)fallback;
+        LOG("Could not derive a login seed from the hostname; using a generated one\n");
+    }
+
+    memcpy(&m_Seed[0], &seed[0], 4);
+    LOG("Login seed: %d.%d.%d.%d\n", m_Seed[0], m_Seed[1], m_Seed[2], m_Seed[3]);
+    g_NetworkInit(true, &m_Seed[0]);
 }
 //----------------------------------------------------------------------------------
 /*!

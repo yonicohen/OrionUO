@@ -75,7 +75,7 @@ private:
     //!Тип сокета. true - Login, false - game
     bool m_IsLoginSocket{ true };
 
-    uchar m_Seed[4];
+    uchar m_Seed[4] = {};
 
     void SendIP(CSocket &socket, puchar seed);
 
