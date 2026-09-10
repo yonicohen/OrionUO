@@ -124,9 +124,10 @@ The desktop build is unaffected by all of the above and still builds and renders
 
 Roughly in order:
 
-1. **Run it.** The APK builds and signs, but has never been installed. No
-   device or emulator has been tried, so the first launch is entirely unknown -
-   expect it to fail on the data path before anything renders.
+1. **Run it on real hardware.** It has been run on an emulator and gets a long
+   way (see below), but stalls in the emulator's own GLES 1.x texture path. A
+   device with a native `libGLESv1_CM` driver is the next test and the one that
+   matters.
 2. **Asset delivery.** The UO data is ~2.6 GB and cannot be redistributed, so it
    cannot ship in the APK. It has to be side-loaded to external storage and
    located at runtime, replacing the `CustomPath` lookup in `uo_debug.cfg`.
@@ -139,13 +140,57 @@ Roughly in order:
 5. **Sound on device.** `SoundBackend.cpp` and SDL2_mixer both build for
    Android, but no audio has been played.
 
+## What happens when you run it
+
+On an `arm64-v8a` emulator (API 34, AOSP image) the client:
+
+- loads `libmain.so`, finds `SDL_main` and runs it;
+- resolves its data path to app storage and reads the UO files from there;
+- creates a **GLES 1.1 context** and initialises the renderer:
+
+  ```
+  GLES v(OpenGL ES-CM 1.1 (OpenGL ES 3.1.0 (ANGLE 2.1.1)))
+  Graphics Successfully Initialized
+  g_UseFrameBuffer = 0; CanUseBuffer = 0
+  ```
+
+- loads anim1-5, speech, tiledata, fonts, skills and the map block table;
+- then **stalls in `glGenTextures`**, on the first texture it uploads:
+
+  ```
+  #00 read
+  #01 qemu_pipe_read                           <- emulator's GL transport
+  #02 QemuPipeStream::commitBufferAndReadFully
+  #03 libGLESv1_enc.so  glGenTextures_enc
+  #04 libmain.so  CGLEngine::GL1_BindTexture16
+  #05 UOFileReader::ReadGump
+  #06 COrion::GetGumpDimension  <- COrion::Install
+  ```
+
+The call that blocks is a plain `glGenTextures(1, &tex)`, and it blocks waiting
+on the emulator's host GL translator rather than in any of our code. The
+emulator also reports the same ANGLE-backed renderer whatever `-gpu` mode it is
+started with, and its GL stack dies outright after a run - the emulator's GLES 1.x
+support is emulated through ANGLE and is the weak link.
+
+That GLES 1.x is the right target for this codebase was checked rather than
+assumed: asking for a GLES 2.0 context instead gets a real ES 3.1 context, and
+the client then segfaults immediately, because the renderer calls fixed function
+entry points that do not exist there. The ES-CM 1.1 path gets orders of
+magnitude further.
+
+So the open question is whether a real device, with a vendor `libGLESv1_CM`
+driver rather than an emulated one, gets past that call. That has not been tried.
+
 ## Caveats
 
-- No Android device or emulator has run this. The client compiles, links and
-  resolves every symbol for ARM64, but linking is not running: nothing has drawn
-  a frame on a phone. The texture conversions in particular are reasoned from
-  the format definitions and verified only by the desktop build still rendering
-  - the GLES paths themselves have never executed.
+- No frame has been drawn. The client starts, initialises a GLES 1.1 context
+  and loads its data on an emulator, but stops at the first texture upload, so
+  nothing has been rendered and no screenshot exists.
+- The texture format conversions have therefore never executed. They are
+  reasoned from the format definitions and verified only by the desktop build
+  still rendering correctly.
+- Touch input, sound and hues are all untested for the same reason.
 - The `0xFACE` handshake, login crypto and networking are platform-independent
   and are already working on macOS, so they are not expected to need changes.
 - UO data files are copyright and must never be bundled in an APK.
