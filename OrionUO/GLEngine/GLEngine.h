@@ -100,6 +100,21 @@ public:
     void Uninstall();
 
     //Обновление области вывода
+    // The pre-game screens are fixed 640x480 artwork with hardcoded gump
+    // coordinates, so they are drawn into a letterboxed, aspect-preserving
+    // region of the window rather than resizing the window down to match them.
+    // Everything outside the renderer works in these 640x480 scene coordinates,
+    // so mouse input has to be mapped back through SceneToWindow's inverse.
+    static const int SceneWidth = 640;
+    static const int SceneHeight = 480;
+
+    float SceneScale = 1.0f;
+    int SceneOffsetX = 0;
+    int SceneOffsetY = 0;
+
+    // Window pixels -> scene coordinates. The identity while in the world.
+    WISP_GEOMETRY::CPoint2Di WindowToScene(int x, int y) const;
+
     void UpdateRect();
 
     //Очистить экран и начать рисование
@@ -121,6 +136,8 @@ public:
     void ViewPort(int x, int y, int width, int height);
 
     //Восстановить стандартную область рисования
+    // Sets viewport and projection for whichever scene is current.
+    void ApplySceneProjection();
     void RestorePort();
 
     //Указать область рисования (ножницами, сохраняет мартицу)

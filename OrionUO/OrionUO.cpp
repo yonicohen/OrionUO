@@ -557,7 +557,13 @@ void COrion::Uninstall()
 void COrion::InitScreen(GAME_STATE state)
 {
     WISPFUN_DEBUG("c194_f7");
+    const GAME_STATE previousState = g_GameState;
     g_GameState = state;
+
+    // Crossing into or out of the world switches between the scaled 640x480 UI
+    // projection and drawing at window resolution.
+    if ((previousState < GS_GAME) != (state < GS_GAME))
+        g_GL.UpdateRect();
     g_SelectedObject.Clear();
     g_LastSelectedObject.Clear();
     g_PressedObject.ClearAll();
