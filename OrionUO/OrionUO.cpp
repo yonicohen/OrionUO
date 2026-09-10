@@ -1,4 +1,4 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+﻿// This is an open source non-commercial project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 /***********************************************************************************
 **
@@ -6615,6 +6615,23 @@ void COrion::OpenProfile(uint serial)
 void COrion::DisconnectGump()
 {
     WISPFUN_DEBUG("c194_f149");
+
+    // A drop before entering the world is a failed login, not a lost game
+    // session. The path below switches to GS_GAME_BLOCKED and puts the notice at
+    // game-window coordinates, which during login sits behind the connection
+    // gump - so a server that hung up on the login packet left the client on
+    // "Verifying account" forever, with the only trace a log line reporting a
+    // connection lost "in game state 11", the state this function had just put
+    // it in. CConnectionManager already draws this distinction on the recv-error
+    // path; make it here too, so every caller gets it.
+    if (g_GameState != GS_GAME &&
+        !(g_GameState == GS_GAME_BLOCKED && g_GameBlockedScreen.Code))
+    {
+        InitScreen(GS_MAIN_CONNECT);
+        g_ConnectionScreen.SetType(CST_CONLOST);
+        return;
+    }
+
     CServer *server = g_ServerList.GetSelectedServer();
     string str = "Disconnected from " + (server != NULL ? server->Name : "server name...");
     g_Orion.CreateTextMessage(TT_SYSTEM, 0, 3, 0x21, str);
