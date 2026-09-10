@@ -737,9 +737,18 @@ PACKET_HANDLER(LoginError)
 {
     WISPFUN_DEBUG("c150_f12");
     LOG("Login error, server reason code = %d\n", (int)*Ptr);
-    if (g_GameState == GS_MAIN_CONNECT || g_GameState == GS_SERVER_CONNECT ||
-        g_GameState == GS_GAME_CONNECT)
+    // The error also arrives while sitting on the character list, not only
+    // during one of the connect steps. It used to be ignored there: the socket
+    // closed with nothing shown, and picking a character then sent Select
+    // Character into a dead connection, leaving the client on 'Entering
+    // Britannia' forever. Reason 1 - the account already being logged in - is
+    // exactly when that happens.
+    if (g_GameState < GS_GAME)
     {
+        if (g_GameState != GS_MAIN_CONNECT && g_GameState != GS_SERVER_CONNECT &&
+            g_GameState != GS_GAME_CONNECT)
+            g_Orion.InitScreen(GS_MAIN_CONNECT);
+
         g_ConnectionScreen.SetConnectionFailed(true);
         g_ConnectionScreen.SetErrorCode(ReadUInt8());
         g_ConnectionManager.Disconnect();
