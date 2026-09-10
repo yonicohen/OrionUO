@@ -19,6 +19,10 @@
 #include "GLVertexBatchShader.h"
 #include "GLVertexBatch.h"
 
+// Sharp filtering only differs from bilinear under magnification, and these
+// scenes render at 1:1, so either setting compares equally. On matches the client.
+bool g_SharpFilter = true;
+
 static const int WIDTH = 256;
 static const int HEIGHT = 256;
 
