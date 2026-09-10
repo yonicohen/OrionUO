@@ -693,6 +693,11 @@ void CGumpOptions::InitToolTip()
             g_ToolTip.Set(L"Shift + rights mouse click in game window for call pathfinding");
             break;
         }
+        case ID_GO_P6_USE_GRID_CONTAINERS:
+        {
+            g_ToolTip.Set(L"Lay container contents out in a grid instead of the bag artwork");
+            break;
+        }
         case ID_GO_P7_SCALE_SPEECH_DURATION:
         {
             g_ToolTip.Set(L"Use timer scaling based on text lines count");
@@ -1980,6 +1985,13 @@ void CGumpOptions::DrawPage6()
     radio->Checked = (g_OptionsConfig.GetCharacterBackpackStyle() == CBS_GHOUL_SKIN);
     radio->SetTextParameters(0, L"Ghoul Skin", g_OptionsTextColor);
 
+    html->Add(new CGUIGroup(8));
+
+    checkbox = (CGUICheckbox *)html->Add(
+        new CGUICheckbox(ID_GO_P6_USE_GRID_CONTAINERS, 0x00D2, 0x00D3, 0x00D2, 0, 486));
+    checkbox->Checked = g_OptionsConfig.GetUseGridContainers();
+    checkbox->SetTextParameters(0, L"Grid Containers", g_OptionsTextColor);
+
     html->CalculateDataSize();
 }
 //----------------------------------------------------------------------------
@@ -2988,6 +3000,8 @@ void CGumpOptions::GUMP_CHECKBOX_EVENT_C
                 serial ==
                 ID_GO_P6_HOLD_SHIFT_FOR_ENABLE_PATHFINDING) //Hold Shift For Enable Pathfinding
                 g_OptionsConfig.HoldShiftForEnablePathfind = state;
+            else if (serial == ID_GO_P6_USE_GRID_CONTAINERS) //Grid Containers
+                g_OptionsConfig.SetUseGridContainers(state);
 
             break;
         }
@@ -3635,6 +3649,19 @@ void CGumpOptions::ApplyPageChanges()
             g_ConfigManager.HoldShiftForContextMenus = g_OptionsConfig.HoldShiftForContextMenus;
             g_ConfigManager.HoldShiftForEnablePathfind = g_OptionsConfig.HoldShiftForEnablePathfind;
             g_ConfigManager.SetCharacterBackpackStyle(g_OptionsConfig.GetCharacterBackpackStyle());
+
+            if (g_ConfigManager.GetUseGridContainers() != g_OptionsConfig.GetUseGridContainers())
+            {
+                g_ConfigManager.SetUseGridContainers(g_OptionsConfig.GetUseGridContainers());
+
+                // Layout is decided in UpdateContent, so an open container keeps its
+                // old arrangement until something asks it to rebuild.
+                QFOR(gump, g_GumpManager.m_Items, CGump *)
+                {
+                    if (gump->GumpType == GT_CONTAINER)
+                        gump->WantUpdateContent = true;
+                }
+            }
 
             int curX = g_ContainerRect.DefaultX;
 

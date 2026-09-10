@@ -47,6 +47,12 @@ CGumpContainer::CGumpContainer(uint serial, uint id, short x, short y)
         box->ToPage = 1;
     }
 
+    // Added before the item box so it draws behind the contents. Size is set in
+    // UpdateContent once the item count is known.
+    m_GridBackground =
+        (CGUIResizepic *)Add(new CGUIResizepic(0, 0x0BB8, 0, 0, GridCellSize, GridCellSize));
+    m_GridBackground->Visible = false;
+
     Add(new CGUIShader(&g_ColorizerShader, true));
 
     m_DataBox = (CGUIDataBox *)Add(new CGUIDataBox());
@@ -58,9 +64,22 @@ CGumpContainer::~CGumpContainer()
 {
 }
 //----------------------------------------------------------------------------------
+bool CGumpContainer::UseGrid() const
+{
+    // The game boards place their pieces meaningfully - a chess piece's position
+    // is the state of the game - so they are never gridded.
+    return g_ConfigManager.GetUseGridContainers() && !IsGameBoard;
+}
+//----------------------------------------------------------------------------------
 void CGumpContainer::UpdateItemCoordinates(CGameObject *item)
 {
     WISPFUN_DEBUG("c93_f3");
+
+    // In grid mode the item's own coordinates are not used for drawing, so there
+    // is nothing to clamp into the artwork's interior.
+    if (UseGrid())
+        return;
+
     if (Graphic < g_ContainerOffset.size())
     {
         const CContainerOffsetRect &rect = g_ContainerOffset[Graphic].Rect;
@@ -239,6 +258,36 @@ void CGumpContainer::UpdateContent()
 
     IsGameBoard = (ID == 0x091A || ID == 0x092E);
 
+    const bool grid = UseGrid();
+    int gridIndex = 0;
+
+    if (grid)
+    {
+        // Size the panel to the contents before laying anything out. Counting
+        // first costs one pass and avoids a panel that lags a frame behind.
+        int itemCount = 0;
+        QFOR(counted, container->m_Items, CGameItem *)
+        {
+            if ((counted->Layer == OL_NONE ||
+                 (container->IsCorpse() && LAYER_UNSAFE[counted->Layer])) &&
+                counted->Count > 0)
+            {
+                itemCount++;
+            }
+        }
+
+        const int rows = (itemCount + GridColumns - 1) / GridColumns;
+        m_GridBackground->Width = GridColumns * GridCellSize + GridBorder * 2;
+        m_GridBackground->Height = (rows < 1 ? 1 : rows) * GridCellSize + GridBorder * 2;
+    }
+
+    m_GridBackground->Visible = grid;
+
+    // The container artwork is a picture of one particular bag, with its own
+    // irregular interior; a grid replaces it rather than sits inside it.
+    if (m_BodyGump != NULL)
+        m_BodyGump->Visible = !grid;
+
     QFOR(obj, container->m_Items, CGameItem *)
     {
         int count = obj->Count;
@@ -250,6 +299,19 @@ void CGumpContainer::UpdateContent()
             ushort graphic = obj->GetDrawGraphic(doubleDraw);
             CGUIGumppicHightlighted *item = NULL;
 
+            // Grid mode only changes where the widget goes. It is the same widget,
+            // carrying the same serial, so dragging, dropping, double-click and
+            // tooltips all keep working without knowing about any of this.
+            int drawX = obj->GetX();
+            int drawY = obj->GetY();
+
+            if (grid)
+            {
+                drawX = GridBorder + (gridIndex % GridColumns) * GridCellSize;
+                drawY = GridBorder + (gridIndex / GridColumns) * GridCellSize;
+                gridIndex++;
+            }
+
             if (IsGameBoard)
             {
                 item = (CGUIGumppicHightlighted *)m_DataBox->Add(new CGUIGumppicHightlighted(
@@ -257,8 +319,8 @@ void CGumpContainer::UpdateContent()
                     graphic - GAME_FIGURE_GUMP_OFFSET,
                     obj->Color & 0x3FFF,
                     0x0035,
-                    obj->GetX(),
-                    obj->GetY() - 20));
+                    drawX,
+                    drawY - 20));
                 item->PartialHue = false;
             }
             else
@@ -268,8 +330,8 @@ void CGumpContainer::UpdateContent()
                     graphic,
                     obj->Color & 0x3FFF,
                     0x0035,
-                    obj->GetX(),
-                    obj->GetY(),
+                    drawX,
+                    drawY,
                     doubleDraw));
                 item->PartialHue = IsPartialHue(g_Orion.GetStaticFlags(graphic));
             }

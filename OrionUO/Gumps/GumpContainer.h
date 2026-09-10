@@ -35,6 +35,18 @@ public:
 
     CGUIGumppic *m_BodyGump{ NULL };
 
+    // Backing panel for grid mode, which replaces the container artwork because
+    // that art is a picture of a specific bag with its own irregular interior.
+    CGUIResizepic *m_GridBackground{ NULL };
+
+    // A cell is one world tile plus a little breathing room, which is what the
+    // item artwork is drawn at.
+    static const int GridCellSize = 50;
+    static const int GridColumns = 10;
+    static const int GridBorder = 12;
+
+    bool UseGrid() const;
+
     void UpdateItemCoordinates(class CGameObject *item);
 
     CTextRenderer *GetTextRenderer() { return &m_TextRenderer; }
