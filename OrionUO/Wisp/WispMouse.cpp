@@ -37,6 +37,12 @@ void CMouse::Update()
 #else
     SDL_GetMouseState(&Position.X, &Position.Y);
 #endif
+
+    // The pre-game screens are drawn scaled and letterboxed into the window, so
+    // the cursor has to be mapped into those 640x480 scene coordinates or every
+    // hit test lands somewhere else. In the world this is the identity.
+    Position = g_GL.WindowToScene(Position.X, Position.Y);
+
     Dragging = (LeftButtonPressed || RightButtonPressed || MidButtonPressed);
     RealPosition = Position;
 }

@@ -1,4 +1,4 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+﻿// This is an open source non-commercial project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 /***********************************************************************************
 **
@@ -42,8 +42,11 @@ void CMainScreen::Init()
     g_ConfigLoaded = false;
     g_GlobalScale = 1.0;
 
-    g_OrionWindow.SetSize(WISP_GEOMETRY::CSize(640, 480));
-    g_OrionWindow.NoResize = true;
+    // This used to force the window to 640x480, the size of the login artwork,
+    // and forbid resizing. The renderer now scales that artwork into whatever
+    // window there is, so leave the window alone - resizing it here and back
+    // again on the way into the world was the whole reason it flapped.
+    g_OrionWindow.NoResize = false;
     g_OrionWindow.SetTitle("Ultima Online");
     g_GL.UpdateRect();
 

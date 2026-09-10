@@ -273,10 +273,57 @@ void CGLEngine::UpdateRect()
     SDL_GL_GetDrawableSize(g_OrionWindow.m_window, &width, &height);
 #endif
 
-    ViewPort(0, 0, width, height);
-    //ViewPort(0, 0, g_OrionWindow.GetSize().Width, g_OrionWindow.GetSize().Height);
+    // In the world the UI is drawn at window resolution, one scene unit per
+    // pixel. Before that, every screen is 640x480 artwork with hardcoded
+    // coordinates and no ability to reflow, so scale it up to fill the window
+    // instead - preserving aspect ratio and centring what is left over. The
+    // alternative, and what this used to do, was to shrink the window itself to
+    // 640x480 on the way to the login screen and grow it again on the way out.
+    if (g_GameState < GS_GAME)
+    {
+        const float scaleX = (float)width / (float)SceneWidth;
+        const float scaleY = (float)height / (float)SceneHeight;
+        SceneScale = (scaleX < scaleY) ? scaleX : scaleY;
+
+        const int scaledWidth = (int)(SceneWidth * SceneScale);
+        const int scaledHeight = (int)(SceneHeight * SceneScale);
+        SceneOffsetX = (width - scaledWidth) / 2;
+        SceneOffsetY = (height - scaledHeight) / 2;
+        LOG("UpdateRect: window %dx%d state=%d scale=%.2f offset=%d,%d\n",
+            width,
+            height,
+            (int)g_GameState,
+            SceneScale,
+            SceneOffsetX,
+            SceneOffsetY);
+
+        // Letterbox bars are never drawn into, so clear the whole window once
+        // here; otherwise they keep whatever was last rendered at that size.
+        glViewport(0, 0, width, height);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        ApplySceneProjection();
+    }
+    else
+    {
+        SceneScale = 1.0f;
+        SceneOffsetX = 0;
+        SceneOffsetY = 0;
+        LOG("UpdateRect: window %dx%d state=%d (in world, 1:1)\n", width, height, (int)g_GameState);
+        ViewPort(0, 0, width, height);
+    }
 
     g_GumpManager.RedrawAll();
+}
+//----------------------------------------------------------------------------------
+WISP_GEOMETRY::CPoint2Di CGLEngine::WindowToScene(int x, int y) const
+{
+    if (SceneScale <= 0.0f)
+        return WISP_GEOMETRY::CPoint2Di(x, y);
+
+    return WISP_GEOMETRY::CPoint2Di(
+        (int)((x - SceneOffsetX) / SceneScale), (int)((y - SceneOffsetY) / SceneScale));
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_BindTexture16(CGLTexture &texture, int width, int height, pushort pixels)
@@ -288,7 +335,10 @@ void CGLEngine::GL1_BindTexture16(CGLTexture &texture, int width, int height, pu
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // Linear magnification: the pre-game screens are 640x480 artwork scaled up
+    // to fill the window, and GL_NEAREST makes that visibly blocky. At 1:1, which
+    // is what the world is drawn at, the two are indistinguishable.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 #if defined(ORION_GLES)
     // GLES 1.x has neither GL_BGRA nor the _REV packed types, and requires the
@@ -355,7 +405,7 @@ void CGLEngine::GL1_BindTexture32(CGLTexture &texture, int width, int height, pu
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
 #if defined(ORION_GLES)
@@ -538,14 +588,37 @@ void CGLEngine::ViewPort(int x, int y, int width, int height)
     glMatrixMode(GL_MODELVIEW);
 }
 //----------------------------------------------------------------------------------
-void CGLEngine::RestorePort()
+void CGLEngine::ApplySceneProjection()
 {
-    WISPFUN_DEBUG("c29_f17");
+    // Before the world, the UI is a scaled and centred 640x480 scene; in the
+    // world it is drawn one scene unit per window pixel. Both cases go through
+    // here so that anything restoring the projection gets the right one - gumps
+    // release a framebuffer every frame and each release lands in RestorePort.
+    if (g_GameState < GS_GAME && SceneScale > 0.0f)
+    {
+        glViewport(
+            SceneOffsetX,
+            SceneOffsetY,
+            (int)(SceneWidth * SceneScale),
+            (int)(SceneHeight * SceneScale));
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glOrtho(0.0, (GLdouble)SceneWidth, (GLdouble)SceneHeight, 0.0, -150.0, 150.0);
+        glMatrixMode(GL_MODELVIEW);
+        return;
+    }
+
     glViewport(0, 0, g_OrionWindow.GetSize().Width, g_OrionWindow.GetSize().Height);
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     glOrtho(0.0, g_OrionWindow.GetSize().Width, g_OrionWindow.GetSize().Height, 0.0, -150.0, 150.0);
     glMatrixMode(GL_MODELVIEW);
+}
+//----------------------------------------------------------------------------------
+void CGLEngine::RestorePort()
+{
+    WISPFUN_DEBUG("c29_f17");
+    ApplySceneProjection();
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::PushScissor(int x, int y, int width, int height)

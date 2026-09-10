@@ -1,4 +1,4 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+﻿// This is an open source non-commercial project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 /***********************************************************************************
 **
@@ -1170,13 +1170,19 @@ bool CConfigManager::LoadBin(const os_path &path)
                     windowHeight = 480;
                 }
 
-                SendMessage(g_OrionWindow.Handle, WM_SYSCOMMAND, SC_RESTORE, 0);
-
+                // Restoring first and then maximizing is two visible, animated window
+                // changes here that net to nothing. Only restore when we are actually
+                // going to set an explicit size.
                 if (zoomed)
+                {
                     SendMessage(g_OrionWindow.Handle, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
+                }
                 else
+                {
+                    SendMessage(g_OrionWindow.Handle, WM_SYSCOMMAND, SC_RESTORE, 0);
                     SetWindowPos(
-                        g_OrionWindow.Handle, NULL, windowX, windowY, windowWidth, windowHeight, 0);
+                            g_OrionWindow.Handle, NULL, windowX, windowY, windowWidth, windowHeight, 0);
+                }
 
                 g_GL.UpdateRect();
 
@@ -1190,7 +1196,9 @@ bool CConfigManager::LoadBin(const os_path &path)
             }
             else
             {
-                SendMessage(g_OrionWindow.Handle, WM_SYSCOMMAND, SC_RESTORE, 0);
+                // Restoring first and then maximizing is two visible, animated window
+                // changes here that net to nothing. Only restore when we are actually
+                // going to set an explicit size.
                 SendMessage(g_OrionWindow.Handle, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
             }
         }
@@ -1829,19 +1837,27 @@ bool CConfigManager::Load(const os_path &path)
             windowHeight = 480;
         }
 
-        SendMessage(g_OrionWindow.Handle, WM_SYSCOMMAND, SC_RESTORE, 0);
-
+        // Restoring first and then maximizing is two visible, animated window
+        // changes here that net to nothing. Only restore when we are actually
+        // going to set an explicit size.
         if (zoomed)
+        {
             SendMessage(g_OrionWindow.Handle, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
+        }
         else
+        {
+            SendMessage(g_OrionWindow.Handle, WM_SYSCOMMAND, SC_RESTORE, 0);
             SetWindowPos(
-                g_OrionWindow.Handle, NULL, windowX, windowY, windowWidth, windowHeight, 0);
+                    g_OrionWindow.Handle, NULL, windowX, windowY, windowWidth, windowHeight, 0);
+        }
 
         g_GL.UpdateRect();
     }
     else
     {
-        SendMessage(g_OrionWindow.Handle, WM_SYSCOMMAND, SC_RESTORE, 0);
+        // Restoring first and then maximizing is two visible, animated window
+        // changes here that net to nothing. Only restore when we are actually
+        // going to set an explicit size.
         SendMessage(g_OrionWindow.Handle, WM_SYSCOMMAND, SC_MAXIMIZE, 0);
     }
 

@@ -52,8 +52,10 @@ even though the path contains a space.
 ./OrionUO "-login uo.jmaul.co.uk,2593" "-orionversion 1.0.35.1"
 ```
 
-The `cd` in step 4 matters — the client resolves `uo_debug.cfg` and `Client.cuo`
-relative to its working directory.
+The `cd` in step 4 matters — the client reads `uo_debug.cfg` from its working
+directory. `Client.cuo`, however, is loaded from the **UO data folder** named by
+`CustomPath`, not from the working directory; a copy next to the binary is
+ignored.
 
 Alternatively, `./tools/setup-macos.sh "/full/path/to/Ultima Online"` does steps
 2 through 4 in one go.
@@ -94,12 +96,38 @@ Expected and harmless. The Orion Assistant is a Windows DLL and cannot load
 natively, so scripting and macros are unavailable. Everything else works.
 
 **`Client.cuo is missing!`**
-It normally ships in the shard's package and is found automatically. To generate
-one:
+It normally ships in the shard's package and is found automatically. If you need
+to generate one, write it into the **UO data folder** — that is the only place
+the client looks:
 
 ```bash
-python3 tools/make_client_cuo.py -o Client.cuo \
+python3 tools/make_client_cuo.py -o "/full/path/to/Ultima Online/Client.cuo" \
     --client-version CV_70180 --encryption ET_TFISH --version-text 7.0.20.0
+```
+
+Match the shard's own file if you have it: Ignis UO ships format 5 with
+`ET_TFISH`, `CV_70180` and version text `7.0.20.0`. Do not overwrite a working
+`Client.cuo` with a generated one — the shard's copy carries login crypt keys
+that a generated file zeroes out.
+
+**Stuck on "Verifying account", or "There is some problem communicating with
+Origin".**
+That dialog is packet `0x82` (Login Denied); the client discards the reason byte
+that says why. Ask the server directly:
+
+```bash
+./tools/login-probe.py uo.jmaul.co.uk 2593
+```
+
+Reason `0x00` means the name or password is wrong. Reason `0x01` means a previous
+session is still open — wait 30-60 seconds. Reason `0x04` is generic and is sent
+before the server looks at your credentials: if a made-up account and your real
+one both return `0x04`, the shard is refusing all logins and nothing client-side
+will fix it. Compare the two before assuming the client is at fault:
+
+```bash
+./tools/login-probe.py uo.jmaul.co.uk 2593 -a madeupname123
+./tools/login-probe.py uo.jmaul.co.uk 2593 -a youraccount -p yourpassword
 ```
 
 **No sound.**
