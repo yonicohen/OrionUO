@@ -94,6 +94,7 @@ set(glengine_src
   GLEngine/GLVector.cpp
   GLEngine/GLVertexBatch.cpp
   GLEngine/GLVertexBatchShader.cpp
+  GLEngine/GLArtUpscale.cpp
 )
 
 set(gui_src
