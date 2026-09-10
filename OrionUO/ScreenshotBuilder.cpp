@@ -1,4 +1,4 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+﻿// This is an open source non-commercial project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 /***********************************************************************************
 **
@@ -102,7 +102,9 @@ UINT_LIST CScreenshotBuilder::GetScenePixels(int x, int y, int width, int height
 
     glReadPixels(
         x,
-        g_OrionWindow.GetSize().Height - y - height,
+        // glReadPixels works in framebuffer pixels, which on a high-DPI display
+        // is larger than the window's logical size.
+        (int)((g_OrionWindow.GetSize().Height - y - height) * g_OrionWindow.GetPixelRatio()),
         width,
         height,
         GL_BGRA,

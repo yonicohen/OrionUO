@@ -31,6 +31,29 @@ CWindow::~CWindow()
 {
 }
 //----------------------------------------------------------------------------------
+float CWindow::GetPixelRatio() const
+{
+#if USE_WISP
+    return 1.0f;
+#else
+    if (m_window == nullptr)
+        return 1.0f;
+
+    int pixelWidth = 0;
+    int pixelHeight = 0;
+    SDL_GL_GetDrawableSize(m_window, &pixelWidth, &pixelHeight);
+
+    int pointWidth = 0;
+    int pointHeight = 0;
+    SDL_GetWindowSize(m_window, &pointWidth, &pointHeight);
+
+    if (pointWidth <= 0 || pixelWidth <= 0)
+        return 1.0f;
+
+    return (float)pixelWidth / (float)pointWidth;
+#endif
+}
+//----------------------------------------------------------------------------------
 void CWindow::SetSize(const WISP_GEOMETRY::CSize &size)
 {
 #if USE_WISP
@@ -248,7 +271,7 @@ bool CWindow::Create(
         SDL_WINDOWPOS_CENTERED,
         width,
         height,
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
+        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     if (!m_window)
     {
         SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Coult not create window: %s\n", SDL_GetError());

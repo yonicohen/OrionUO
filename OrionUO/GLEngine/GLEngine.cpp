@@ -248,7 +248,9 @@ void CGLEngine::UpdateRect()
     int height = cr.bottom - cr.top;
 #else
     int width, height;
-    SDL_GL_GetDrawableSize(g_OrionWindow.m_window, &width, &height);
+    // Logical points, not framebuffer pixels: the scene scale and the mouse
+    // both work in points, and ApplySceneProjection converts to pixels.
+    SDL_GetWindowSize(g_OrionWindow.m_window, &width, &height);
 #endif
 
     // In the world the UI is drawn at window resolution, one scene unit per
@@ -267,9 +269,10 @@ void CGLEngine::UpdateRect()
         const int scaledHeight = (int)(SceneHeight * SceneScale);
         SceneOffsetX = (width - scaledWidth) / 2;
         SceneOffsetY = (height - scaledHeight) / 2;
-        LOG("UpdateRect: window %dx%d state=%d scale=%.2f offset=%d,%d\n",
+        LOG("UpdateRect: window %dx%d (x%.1f dpi) state=%d scale=%.2f offset=%d,%d\n",
             width,
             height,
+            g_OrionWindow.GetPixelRatio(),
             (int)g_GameState,
             SceneScale,
             SceneOffsetX,
@@ -288,7 +291,11 @@ void CGLEngine::UpdateRect()
         SceneScale = 1.0f;
         SceneOffsetX = 0;
         SceneOffsetY = 0;
-        LOG("UpdateRect: window %dx%d state=%d (in world, 1:1)\n", width, height, (int)g_GameState);
+        LOG("UpdateRect: window %dx%d (x%.1f dpi) state=%d (in world, 1:1)\n",
+            width,
+            height,
+            g_OrionWindow.GetPixelRatio(),
+            (int)g_GameState);
         ViewPort(0, 0, width, height);
     }
 
@@ -317,7 +324,7 @@ void CGLEngine::GL1_BindTexture16(CGLTexture &texture, int width, int height, pu
     // to fill the window, and GL_NEAREST makes that visibly blocky. At 1:1, which
     // is what the world is drawn at, the two are indistinguishable.
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexImage2D(
         GL_TEXTURE_2D,
         0,
@@ -360,7 +367,7 @@ void CGLEngine::GL1_BindTexture32(CGLTexture &texture, int width, int height, pu
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
     glTexImage2D(
         GL_TEXTURE_2D, 0, GL_RGBA4, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8, pixels);
@@ -489,7 +496,16 @@ void CGLEngine::EndStencil()
 void CGLEngine::ViewPortScaled(int x, int y, int width, int height)
 {
     WISPFUN_DEBUG("c29_f15");
-    glViewport(x, g_OrionWindow.GetSize().Height - y - height, width, height);
+    // The viewport is in framebuffer pixels; everything drawn through the
+    // projection below stays in logical points, so on a high-DPI display the
+    // same drawing lands on four times as many pixels and nothing that lays out
+    // the UI has to know.
+    const float pixelRatio = g_OrionWindow.GetPixelRatio();
+    glViewport(
+        (int)(x * pixelRatio),
+        (int)((g_OrionWindow.GetSize().Height - y - height) * pixelRatio),
+        (int)(width * pixelRatio),
+        (int)(height * pixelRatio));
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
 
@@ -511,7 +527,16 @@ void CGLEngine::ViewPortScaled(int x, int y, int width, int height)
 void CGLEngine::ViewPort(int x, int y, int width, int height)
 {
     WISPFUN_DEBUG("c29_f16");
-    glViewport(x, g_OrionWindow.GetSize().Height - y - height, width, height);
+    // The viewport is in framebuffer pixels; everything drawn through the
+    // projection below stays in logical points, so on a high-DPI display the
+    // same drawing lands on four times as many pixels and nothing that lays out
+    // the UI has to know.
+    const float pixelRatio = g_OrionWindow.GetPixelRatio();
+    glViewport(
+        (int)(x * pixelRatio),
+        (int)((g_OrionWindow.GetSize().Height - y - height) * pixelRatio),
+        (int)(width * pixelRatio),
+        (int)(height * pixelRatio));
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     glOrtho(x, width + x, height + y, y, -150.0, 150.0);
@@ -526,11 +551,12 @@ void CGLEngine::ApplySceneProjection()
     // release a framebuffer every frame and each release lands in RestorePort.
     if (g_GameState < GS_GAME && SceneScale > 0.0f)
     {
+        const float pixelRatio = g_OrionWindow.GetPixelRatio();
         glViewport(
-            SceneOffsetX,
-            SceneOffsetY,
-            (int)(SceneWidth * SceneScale),
-            (int)(SceneHeight * SceneScale));
+            (int)(SceneOffsetX * pixelRatio),
+            (int)(SceneOffsetY * pixelRatio),
+            (int)(SceneWidth * SceneScale * pixelRatio),
+            (int)(SceneHeight * SceneScale * pixelRatio));
         glMatrixMode(GL_PROJECTION);
         glLoadIdentity();
         glOrtho(0.0, (GLdouble)SceneWidth, (GLdouble)SceneHeight, 0.0, -150.0, 150.0);
@@ -538,7 +564,12 @@ void CGLEngine::ApplySceneProjection()
         return;
     }
 
-    glViewport(0, 0, g_OrionWindow.GetSize().Width, g_OrionWindow.GetSize().Height);
+    const float windowPixelRatio = g_OrionWindow.GetPixelRatio();
+    glViewport(
+        0,
+        0,
+        (int)(g_OrionWindow.GetSize().Width * windowPixelRatio),
+        (int)(g_OrionWindow.GetSize().Height * windowPixelRatio));
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     glOrtho(0.0, g_OrionWindow.GetSize().Width, g_OrionWindow.GetSize().Height, 0.0, -150.0, 150.0);

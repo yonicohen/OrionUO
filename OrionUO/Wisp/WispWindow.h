@@ -19,6 +19,11 @@ protected:
 
 public:
     WISP_GEOMETRY::CSize GetSize() { return m_Size; };
+
+    // Ratio of framebuffer pixels to logical points. 2.0 on a Retina display,
+    // 1.0 everywhere else. GetSize() and everything laid out in the UI stay in
+    // points; only the GL viewport is expressed in pixels.
+    float GetPixelRatio() const;
     void SetSize(const WISP_GEOMETRY::CSize &val);
 
     WISP_GEOMETRY::CSize GetMinSize() { return m_MinSize; };
