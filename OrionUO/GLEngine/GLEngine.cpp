@@ -215,6 +215,13 @@ bool CGLEngine::Install()
 
     glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_FALSE);
 
+    // Build the shader pipeline that CGLVertexBatch can draw through. It is the
+    // path a Core profile or GLES 2.0 will require; drawing through it now, in a
+    // context that still has the fixed function pipeline, is what makes the two
+    // comparable. Falling back costs nothing if the driver refuses it.
+    g_GLBatch.UseShaders = g_GLBatchShader.Init();
+    LOG("Vertex batch path: %s\n", g_GLBatch.UseShaders ? "shader + vertex buffer" : "fixed function arrays");
+
     ViewPort(0, 0, g_OrionWindow.GetSize().Width, g_OrionWindow.GetSize().Height);
 
     return true;

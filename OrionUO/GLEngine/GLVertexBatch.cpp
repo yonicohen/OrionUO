@@ -204,7 +204,12 @@ void CGLVertexBatch::DrawWithShader(int count)
     const bool haveTexCoords = m_Textured && (int)(m_TexCoords.size() / 2) == count;
     const bool haveColors = m_Colored && (int)(m_Colors.size() / 4) == count;
 
-    const int floatsPerVertex = 8; // position.xy, texcoord.uv, colour.rgba
+    // Lighting is fixed function state, so ask GL whether it is on rather than
+    // tracking it separately; the land tile path enables it around its draw.
+    const bool lit = (glIsEnabled(GL_LIGHTING) == GL_TRUE) && m_Normaled &&
+                     (int)(m_Normals.size() / 3) == count;
+
+    const int floatsPerVertex = 11; // position.xy, texcoord.uv, colour.rgba, normal.xyz
     m_Interleaved.clear();
     m_Interleaved.reserve((size_t)count * floatsPerVertex);
 
@@ -221,9 +226,13 @@ void CGLVertexBatch::DrawWithShader(int count)
             m_Interleaved.push_back(
                 haveColors ? m_Colors[i * 4 + channel] : uniformColor[channel]);
         }
+
+        m_Interleaved.push_back(lit ? m_Normals[i * 3 + 0] : 0.0f);
+        m_Interleaved.push_back(lit ? m_Normals[i * 3 + 1] : 0.0f);
+        m_Interleaved.push_back(lit ? m_Normals[i * 3 + 2] : 1.0f);
     }
 
     g_GLBatchShader.Draw(
-        m_Mode, &m_Interleaved[0], count, floatsPerVertex, haveTexCoords);
+        m_Mode, &m_Interleaved[0], count, floatsPerVertex, haveTexCoords, lit);
 }
 //----------------------------------------------------------------------------------

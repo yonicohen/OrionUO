@@ -31,10 +31,23 @@ private:
     GLint m_AttribPosition = -1;
     GLint m_AttribTexCoord = -1;
     GLint m_AttribColor = -1;
+    GLint m_AttribNormal = -1;
 
     GLint m_UniformTransform = -1;
     GLint m_UniformTexture = -1;
     GLint m_UniformTextured = -1;
+    GLint m_UniformLighting = -1;
+    GLint m_UniformLightDirection = -1;
+    GLint m_UniformLightConstant = -1;
+    GLint m_UniformLightDiffuse = -1;
+
+    // Light and material never change after start-up, so they are read back once.
+    bool m_LightingCached = false;
+    float m_LightDirection[3] = {};
+    float m_LightConstant[3] = {};
+    float m_LightDiffuse[3] = {};
+
+    void CacheLightingState();
 
     bool m_Available = false;
 
@@ -57,7 +70,8 @@ public:
         const float *vertices,
         int vertexCount,
         int floatsPerVertex,
-        bool textured);
+        bool textured,
+        bool lit);
 };
 //----------------------------------------------------------------------------------
 extern CGLVertexBatchShader g_GLBatchShader;

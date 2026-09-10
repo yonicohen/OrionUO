@@ -19,13 +19,28 @@ static const char *s_VertexShader =
     "attribute vec2 a_position;\n"
     "attribute vec2 a_texcoord;\n"
     "attribute vec4 a_color;\n"
+    "attribute vec3 a_normal;\n"
     "uniform mat4 u_transform;\n"
+    "uniform int u_lighting;\n"
+    "uniform vec3 u_lightDirection;\n"
+    "uniform vec3 u_lightConstant;\n"
+    "uniform vec3 u_lightDiffuse;\n"
     "varying vec2 v_texcoord;\n"
     "varying vec4 v_color;\n"
     "void main()\n"
     "{\n"
     "    v_texcoord = a_texcoord;\n"
     "    v_color = a_color;\n"
+    "\n"
+    "    if (u_lighting != 0)\n"
+    "    {\n"
+    "        // The fixed function model this reproduces, with no specular and no\n"
+    "        // colour material: emission + model_ambient*mat_ambient +\n"
+    "        // light_ambient*mat_ambient + max(dot(N,L),0)*light_diffuse*mat_diffuse.\n"
+    "        // The two products that do not vary per vertex arrive precomputed.\n"
+    "        float ndotl = max(dot(normalize(a_normal), u_lightDirection), 0.0);\n"
+    "        v_color = vec4(u_lightConstant + u_lightDiffuse * ndotl, 1.0);\n"
+    "    }\n"
     "    gl_Position = u_transform * vec4(a_position, 0.0, 1.0);\n"
     "}\n";
 
@@ -112,9 +127,14 @@ bool CGLVertexBatchShader::Init()
     m_AttribPosition = glGetAttribLocation(m_Program, "a_position");
     m_AttribTexCoord = glGetAttribLocation(m_Program, "a_texcoord");
     m_AttribColor = glGetAttribLocation(m_Program, "a_color");
+    m_AttribNormal = glGetAttribLocation(m_Program, "a_normal");
     m_UniformTransform = glGetUniformLocation(m_Program, "u_transform");
     m_UniformTexture = glGetUniformLocation(m_Program, "u_texture");
     m_UniformTextured = glGetUniformLocation(m_Program, "u_textured");
+    m_UniformLighting = glGetUniformLocation(m_Program, "u_lighting");
+    m_UniformLightDirection = glGetUniformLocation(m_Program, "u_lightDirection");
+    m_UniformLightConstant = glGetUniformLocation(m_Program, "u_lightConstant");
+    m_UniformLightDiffuse = glGetUniformLocation(m_Program, "u_lightDiffuse");
 
     if (m_AttribPosition < 0 || m_UniformTransform < 0)
     {
@@ -153,8 +173,51 @@ void CGLVertexBatchShader::Free()
     m_Available = false;
 }
 //----------------------------------------------------------------------------------
+void CGLVertexBatchShader::CacheLightingState()
+{
+    // Light and material are set once at start-up and never change, so read them
+    // back once rather than per draw. Reading them at all - instead of hardcoding
+    // the numbers - keeps this honest against the fixed function path it has to
+    // match, and makes the values obvious when the matrix stack goes away.
+    GLfloat lightPosition[4] = {};
+    GLfloat lightAmbient[4] = {};
+    GLfloat lightDiffuse[4] = {};
+    GLfloat modelAmbient[4] = {};
+    GLfloat materialAmbient[4] = {};
+    GLfloat materialDiffuse[4] = {};
+
+    glGetLightfv(GL_LIGHT0, GL_POSITION, lightPosition);
+    glGetLightfv(GL_LIGHT0, GL_AMBIENT, lightAmbient);
+    glGetLightfv(GL_LIGHT0, GL_DIFFUSE, lightDiffuse);
+    glGetFloatv(GL_LIGHT_MODEL_AMBIENT, modelAmbient);
+    glGetMaterialfv(GL_FRONT, GL_AMBIENT, materialAmbient);
+    glGetMaterialfv(GL_FRONT, GL_DIFFUSE, materialDiffuse);
+
+    // w == 0 means directional, and the direction is the position itself.
+    float length = sqrtf(
+        lightPosition[0] * lightPosition[0] + lightPosition[1] * lightPosition[1] +
+        lightPosition[2] * lightPosition[2]);
+    if (length <= 0.0f)
+        length = 1.0f;
+
+    for (int i = 0; i < 3; i++)
+    {
+        m_LightDirection[i] = lightPosition[i] / length;
+        m_LightConstant[i] = modelAmbient[i] * materialAmbient[i] +
+                             lightAmbient[i] * materialAmbient[i];
+        m_LightDiffuse[i] = lightDiffuse[i] * materialDiffuse[i];
+    }
+
+    m_LightingCached = true;
+}
+//----------------------------------------------------------------------------------
 void CGLVertexBatchShader::Draw(
-    GLenum mode, const float *vertices, int vertexCount, int floatsPerVertex, bool textured)
+    GLenum mode,
+    const float *vertices,
+    int vertexCount,
+    int floatsPerVertex,
+    bool textured,
+    bool lit)
 {
     if (!m_Available || vertexCount == 0)
         return;
@@ -190,6 +253,21 @@ void CGLVertexBatchShader::Draw(
     if (m_UniformTextured >= 0)
         glUniform1i(m_UniformTextured, textured ? 1 : 0);
 
+    if (m_UniformLighting >= 0)
+    {
+        if (lit && !m_LightingCached)
+            CacheLightingState();
+
+        glUniform1i(m_UniformLighting, lit ? 1 : 0);
+
+        if (lit)
+        {
+            glUniform3fv(m_UniformLightDirection, 1, m_LightDirection);
+            glUniform3fv(m_UniformLightConstant, 1, m_LightConstant);
+            glUniform3fv(m_UniformLightDiffuse, 1, m_LightDiffuse);
+        }
+    }
+
     const GLsizei stride = (GLsizei)(floatsPerVertex * sizeof(float));
 
     glBindBuffer(GL_ARRAY_BUFFER, m_VertexBuffer);
@@ -213,7 +291,17 @@ void CGLVertexBatchShader::Draw(
             m_AttribColor, 4, GL_FLOAT, GL_FALSE, stride, (const void *)(4 * sizeof(float)));
     }
 
+    if (m_AttribNormal >= 0)
+    {
+        glEnableVertexAttribArray(m_AttribNormal);
+        glVertexAttribPointer(
+            m_AttribNormal, 3, GL_FLOAT, GL_FALSE, stride, (const void *)(8 * sizeof(float)));
+    }
+
     glDrawArrays(mode, 0, vertexCount);
+
+    if (m_AttribNormal >= 0)
+        glDisableVertexAttribArray(m_AttribNormal);
 
     if (m_AttribColor >= 0)
         glDisableVertexAttribArray(m_AttribColor);

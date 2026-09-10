@@ -299,18 +299,33 @@ int main(int, char **)
             }
         }
 
-        const bool shaderOk = !shaderReady || (shaderDiffering == 0);
+        // Reimplementing fixed function lighting in a shader will not round
+        // identically - the interpolation happens at different precision - so a
+        // whole-channel difference is a failure but one step of 255 is not. The
+        // margin is reported either way rather than hidden.
+        const bool shaderOk = !shaderReady || (shaderWorst <= 1);
         if (!ok || !shaderOk)
             failures++;
+
+        const char *shaderVerdict = "skipped";
+        if (shaderReady)
+        {
+            if (shaderDiffering == 0)
+                shaderVerdict = "identical";
+            else if (shaderOk)
+                shaderVerdict = "within 1/255";
+            else
+                shaderVerdict = "DIFFERS";
+        }
 
         printf("  %-38s arrays:%-10s shader:%s\n",
                SCENES[i].name,
                ok ? "identical" : "DIFFERS",
-               !shaderReady ? "skipped" : (shaderOk ? "identical" : "DIFFERS"));
+               shaderVerdict);
         if (!ok)
             printf("      arrays differ: %ld bytes, worst %d\n", differing, worst);
-        if (!shaderOk)
-            printf("      shader differs: %ld bytes, worst %d\n", shaderDiffering, shaderWorst);
+        if (shaderReady && shaderDiffering != 0)
+            printf("      %ld byte(s) differ, worst %d\n", shaderDiffering, shaderWorst);
     }
 
     GLenum err = glGetError();
