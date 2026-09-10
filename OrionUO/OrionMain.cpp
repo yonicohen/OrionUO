@@ -96,28 +96,50 @@ int main(int argc, char **argv)
     SDL_Log("SDL Initialized.");
 
 #if defined(__ANDROID__)
-    // Android starts the process at '/', so the working directory that
-    // CApplication picked up is useless. Point it at app-specific external
-    // storage instead: it needs no runtime permission and is where 'adb push'
-    // can place the UO data, which cannot ship in the APK.
+    // Android starts the process at '/', so the working directory CApplication
+    // picked up is useless. The data lives in app storage instead.
     //
-    // This has to happen here and not in CApplication's constructor. That
-    // constructor runs while dlopen maps the library, which is before
-    // SDLActivity.nativeSetupJNI() has cached its method IDs, so calling into
-    // SDL's JNI glue that early aborts the process with 'mid == null'.
-    if (const char *androidStorage = SDL_AndroidGetExternalStoragePath())
+    // External storage is the normal place - it is where 'adb push' can write and
+    // it has room for the ~2.6 GB of UO data, which cannot ship in the APK. But it
+    // can be unmounted or unavailable, so fall back to internal storage, and
+    // prefer whichever actually holds Client.cuo.
+    //
+    // This has to happen here rather than in CApplication's constructor: that
+    // runs while dlopen maps the library, before SDLActivity.nativeSetupJNI()
+    // has cached its method IDs, and calling SDL's JNI glue that early aborts
+    // the process with 'mid == null'.
     {
-        g_App.m_UOPath = g_App.m_ExePath = os_path(androidStorage);
-        g_MainScreen.LoadCustomPath();
-
-        // LOG() is fprintf(stdout, ...) in this build and Android discards
-        // stdout, so point it at a file next to the data. Line buffering keeps
-        // the log useful if the process is killed rather than exiting.
-        const string logPath = StringFromPath(g_App.ExeFilePath("uolog.txt"));
-        if (freopen(logPath.c_str(), "w", stdout) != nullptr)
+        const char *candidates[2] = { SDL_AndroidGetExternalStoragePath(),
+                                      SDL_AndroidGetInternalStoragePath() };
+        const char *chosen = nullptr;
+        for (const char *candidate : candidates)
         {
-            setvbuf(stdout, nullptr, _IOLBF, 0);
-            dup2(fileno(stdout), fileno(stderr));
+            if (candidate == nullptr)
+                continue;
+            if (chosen == nullptr)
+                chosen = candidate;
+            if (fs_path_exists(os_path(candidate) + PATH_SEP + ToPath("Client.cuo")))
+            {
+                chosen = candidate;
+                break;
+            }
+        }
+
+        if (chosen != nullptr)
+        {
+            g_App.m_UOPath = g_App.m_ExePath = os_path(chosen);
+            g_MainScreen.LoadCustomPath();
+
+            // LOG() is fprintf(stdout, ...) in this build and Android discards
+            // stdout, so point it at a file next to the data. Line buffering
+            // keeps the log useful if the process is killed rather than exiting.
+            const string logPath = StringFromPath(g_App.ExeFilePath("uolog.txt"));
+            if (freopen(logPath.c_str(), "w", stdout) != nullptr)
+            {
+                setvbuf(stdout, nullptr, _IOLBF, 0);
+                dup2(fileno(stdout), fileno(stderr));
+            }
+            LOG("Android data path: %s\n", chosen);
         }
     }
 #endif

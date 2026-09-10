@@ -1,4 +1,4 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+﻿// This is an open source non-commercial project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 /***********************************************************************************
 **
@@ -382,8 +382,10 @@ bool COrion::Install()
     LOG("Replaces...\n");
     IndexReplaces();
 
+    LOG("Static tile filters...\n");
     CheckStaticTileFilterFiles();
 
+    LOG("Statusbar gump dimensions...\n");
     WISP_GEOMETRY::CSize statusbarDims = GetGumpDimension(0x0804);
 
     CGumpStatusbar::m_StatusbarDefaultWidth = statusbarDims.Width;
