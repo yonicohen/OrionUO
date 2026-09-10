@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 
 #include "FileSystem.h"
 #include <SDL.h>
@@ -74,6 +74,14 @@ extern COrionWindow g_OrionWindow;
 int main(int argc, char **argv)
 {
     WISPFUN_DEBUG();
+
+    // LOG() is fprintf(stdout, ...) here. Redirected to a file, stdout is block
+    // buffered, so up to 8 KB of output - which can be minutes of a session, and
+    // is exactly the part you want when something goes wrong - sits unwritten
+    // until the next flush. Line buffering makes 'tail -f' on the log tell the
+    // truth, and keeps the log useful if the process is killed rather than
+    // exiting cleanly.
+    setvbuf(stdout, nullptr, _IOLBF, 0);
 
     SetStubCommandLine(argc, argv);
 
