@@ -657,6 +657,12 @@ inline void CGLEngine::BindTexture(GLuint texture)
     }
 }
 //----------------------------------------------------------------------------------
+inline void CGLEngine::BindTexture(const CGLTexture &texture)
+{
+    BindTexture(texture);
+    g_GLBatch.SetSourceSize(texture.Width, texture.Height);
+}
+//----------------------------------------------------------------------------------
 void CGLEngine::DrawLine(int x, int y, int targetX, int targetY)
 {
     WISPFUN_DEBUG("c29_f26");
@@ -721,7 +727,7 @@ void CGLEngine::DrawCircle(float x, float y, float radius, int gradientMode)
 void CGLEngine::GL1_DrawLandTexture(const CGLTexture &texture, int x, int y, CLandObject *land)
 {
     WISPFUN_DEBUG("c29_f29");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     float translateX = x - 22.0f;
     float translateY = y - 22.0f;
@@ -755,7 +761,7 @@ void CGLEngine::GL1_DrawLandTexture(const CGLTexture &texture, int x, int y, CLa
 void CGLEngine::GL1_Draw(const CGLTexture &texture, int x, int y)
 {
     WISPFUN_DEBUG("c29_f30");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
@@ -779,7 +785,7 @@ void CGLEngine::GL1_Draw(const CGLTexture &texture, int x, int y)
 void CGLEngine::GL1_DrawRotated(const CGLTexture &texture, int x, int y, float angle)
 {
     WISPFUN_DEBUG("c29_f31");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
@@ -808,7 +814,7 @@ void CGLEngine::GL1_DrawRotated(const CGLTexture &texture, int x, int y, float a
 void CGLEngine::GL1_DrawMirrored(const CGLTexture &texture, int x, int y, bool mirror)
 {
     WISPFUN_DEBUG("c29_f32");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
@@ -849,7 +855,7 @@ void CGLEngine::GL1_DrawSitting(
     const CGLTexture &texture, int x, int y, bool mirror, float h3mod, float h6mod, float h9mod)
 {
     WISPFUN_DEBUG("c29_f33");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
 
@@ -964,7 +970,7 @@ void CGLEngine::GL1_DrawSitting(
 void CGLEngine::GL1_DrawShadow(const CGLTexture &texture, int x, int y, bool mirror)
 {
     WISPFUN_DEBUG("c29_f34");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     float width = (float)texture.Width;
     float height = texture.Height / 2.0f;
@@ -1009,7 +1015,7 @@ void CGLEngine::GL1_DrawStretched(
     const CGLTexture &texture, int x, int y, int drawWidth, int drawHeight)
 {
     WISPFUN_DEBUG("c29_f35");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
@@ -1160,7 +1166,7 @@ void CGLEngine::GL1_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
 void CGLEngine::GL2_DrawLandTexture(const CGLTexture &texture, int x, int y, CLandObject *land)
 {
     WISPFUN_DEBUG("c29_f37");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     float translateX = x - 22.0f;
     float translateY = y - 22.0f;
@@ -1188,7 +1194,7 @@ void CGLEngine::GL2_DrawLandTexture(const CGLTexture &texture, int x, int y, CLa
 void CGLEngine::GL2_Draw(const CGLTexture &texture, int x, int y)
 {
     WISPFUN_DEBUG("c29_f38");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
@@ -1209,7 +1215,7 @@ void CGLEngine::GL2_Draw(const CGLTexture &texture, int x, int y)
 void CGLEngine::GL2_DrawRotated(const CGLTexture &texture, int x, int y, float angle)
 {
     WISPFUN_DEBUG("c29_f39");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
@@ -1235,7 +1241,7 @@ void CGLEngine::GL2_DrawRotated(const CGLTexture &texture, int x, int y, float a
 void CGLEngine::GL2_DrawMirrored(const CGLTexture &texture, int x, int y, bool mirror)
 {
     WISPFUN_DEBUG("c29_f40");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
@@ -1261,7 +1267,7 @@ void CGLEngine::GL2_DrawSitting(
     const CGLTexture &texture, int x, int y, bool mirror, float h3mod, float h6mod, float h9mod)
 {
     WISPFUN_DEBUG("c29_f41");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
 
@@ -1376,7 +1382,7 @@ void CGLEngine::GL2_DrawSitting(
 void CGLEngine::GL2_DrawShadow(const CGLTexture &texture, int x, int y, bool mirror)
 {
     WISPFUN_DEBUG("c29_f42");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     float width = (float)texture.Width;
     float height = texture.Height / 2.0f;
@@ -1426,7 +1432,7 @@ void CGLEngine::GL2_DrawStretched(
     const CGLTexture &texture, int x, int y, int drawWidth, int drawHeight)
 {
     WISPFUN_DEBUG("c29_f43");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;

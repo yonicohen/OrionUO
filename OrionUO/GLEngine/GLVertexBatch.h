@@ -60,6 +60,18 @@ public:
     // function client arrays. Off until the program has been built.
     bool UseShaders = false;
 
+    int m_SourceWidth = 0;
+    int m_SourceHeight = 0;
+
+    // Dimensions of the texture about to be drawn, so the shader can filter in
+    // texel space. Zero means unknown, and the shader falls back to plain
+    // bilinear.
+    void SetSourceSize(int width, int height)
+    {
+        m_SourceWidth = width;
+        m_SourceHeight = height;
+    }
+
     void Reserve();
 
     void Begin(GLenum mode, bool textured);

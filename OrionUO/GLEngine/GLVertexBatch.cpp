@@ -232,6 +232,7 @@ void CGLVertexBatch::DrawWithShader(int count)
         m_Interleaved.push_back(lit ? m_Normals[i * 3 + 2] : 1.0f);
     }
 
+    g_GLBatchShader.SetSourceSize(m_SourceWidth, m_SourceHeight);
     g_GLBatchShader.Draw(
         m_Mode, &m_Interleaved[0], count, floatsPerVertex, haveTexCoords, lit);
 }

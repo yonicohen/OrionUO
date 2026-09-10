@@ -36,6 +36,10 @@ private:
     GLint m_UniformTransform = -1;
     GLint m_UniformTexture = -1;
     GLint m_UniformTextured = -1;
+    GLint m_UniformSourceSize = -1;
+
+    int m_SourceWidth = 0;
+    int m_SourceHeight = 0;
     GLint m_UniformLighting = -1;
     GLint m_UniformLightDirection = -1;
     GLint m_UniformLightConstant = -1;
@@ -63,6 +67,13 @@ public:
     void Free();
 
     bool Available() const { return m_Available; }
+
+    // Source texture dimensions, for filtering magnified art in texel space.
+    void SetSourceSize(int width, int height)
+    {
+        m_SourceWidth = width;
+        m_SourceHeight = height;
+    }
 
     // Draws interleaved vertices: position.xy, texcoord.uv, color.rgba.
     void Draw(

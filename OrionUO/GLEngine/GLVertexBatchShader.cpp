@@ -48,13 +48,34 @@ static const char *s_FragmentShader =
     "#version 120\n"
     "uniform sampler2D u_texture;\n"
     "uniform int u_textured;\n"
+    "uniform vec2 u_sourceSize;\n"
     "varying vec2 v_texcoord;\n"
     "varying vec4 v_color;\n"
     "void main()\n"
     "{\n"
     "    vec4 color = v_color;\n"
     "    if (u_textured != 0)\n"
-    "        color *= texture2D(u_texture, v_texcoord);\n"
+    "    {\n"
+    "        vec2 uv = v_texcoord;\n"
+    "\n"
+    "        // Sharp bilinear. UO art is fixed low resolution - the login screen is\n"
+    "        // 640x480 - and magnifying it several times with plain bilinear turns\n"
+    "        // pixel art to mush, while nearest leaves harsh stair steps. This keeps\n"
+    "        // each texel flat and blends only across the boundary between them, over\n"
+    "        // as narrow a band as the magnification allows: crisp edges, smooth\n"
+    "        // diagonals. At 1:1 the blend band is a whole texel and it degenerates\n"
+    "        // to ordinary bilinear, so nothing changes when nothing is magnified.\n"
+    "        if (u_sourceSize.x > 0.0)\n"
+    "        {\n"
+    "            vec2 texels = uv * u_sourceSize;\n"
+    "            vec2 center = floor(texels) + 0.5;\n"
+    "            vec2 width = max(fwidth(texels), vec2(0.0001));\n"
+    "            texels = center + clamp((texels - center) / width, -0.5, 0.5);\n"
+    "            uv = texels / u_sourceSize;\n"
+    "        }\n"
+    "\n"
+    "        color *= texture2D(u_texture, uv);\n"
+    "    }\n"
     "\n"
     "    // The fixed function path runs with glAlphaFunc(GL_GREATER, 0.0), which\n"
     "    // Core profiles and GLES both drop. discard reproduces it exactly.\n"
@@ -131,6 +152,7 @@ bool CGLVertexBatchShader::Init()
     m_UniformTransform = glGetUniformLocation(m_Program, "u_transform");
     m_UniformTexture = glGetUniformLocation(m_Program, "u_texture");
     m_UniformTextured = glGetUniformLocation(m_Program, "u_textured");
+    m_UniformSourceSize = glGetUniformLocation(m_Program, "u_sourceSize");
     m_UniformLighting = glGetUniformLocation(m_Program, "u_lighting");
     m_UniformLightDirection = glGetUniformLocation(m_Program, "u_lightDirection");
     m_UniformLightConstant = glGetUniformLocation(m_Program, "u_lightConstant");
@@ -252,6 +274,9 @@ void CGLVertexBatchShader::Draw(
 
     if (m_UniformTextured >= 0)
         glUniform1i(m_UniformTextured, textured ? 1 : 0);
+
+    if (m_UniformSourceSize >= 0)
+        glUniform2f(m_UniformSourceSize, (float)m_SourceWidth, (float)m_SourceHeight);
 
     if (m_UniformLighting >= 0)
     {
