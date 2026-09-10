@@ -93,6 +93,7 @@ set(glengine_src
   GLEngine/GLTexture.cpp
   GLEngine/GLVector.cpp
   GLEngine/GLVertexBatch.cpp
+  GLEngine/GLVertexBatchShader.cpp
 )
 
 set(gui_src

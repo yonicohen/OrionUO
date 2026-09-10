@@ -1,4 +1,4 @@
-/***********************************************************************************
+﻿/***********************************************************************************
 **
 ** GLVertexBatch.h
 **
@@ -34,6 +34,9 @@ private:
     std::vector<float> m_Colors;
     std::vector<float> m_Normals;
 
+    // Interleaved position/texcoord/colour, built only for the shader path.
+    std::vector<float> m_Interleaved;
+
     GLenum m_Mode = GL_TRIANGLE_STRIP;
     bool m_Textured = false;
     bool m_Colored = false;
@@ -45,12 +48,17 @@ private:
 
     // Backfills the vertices emitted before the first Color()/Normal() call with
     // the value the fixed-function pipeline would have applied to them.
+    void DrawWithShader(int count);
     void SeedColorsFromGL();
     void SeedNormalsFromGL();
 
 public:
     CGLVertexBatch() { Reserve(); }
     ~CGLVertexBatch() {}
+
+    // Draw through the shader and vertex buffer rather than the fixed
+    // function client arrays. Off until the program has been built.
+    bool UseShaders = false;
 
     void Reserve();
 

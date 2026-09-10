@@ -16,6 +16,7 @@
 #include <cstring>
 #include <vector>
 
+#include "GLVertexBatchShader.h"
 #include "GLVertexBatch.h"
 
 static const int WIDTH = 256;
@@ -249,10 +250,15 @@ int main(int, char **)
     int failures = 0;
     const int sceneCount = (int)(sizeof(SCENES) / sizeof(SCENES[0]));
 
+    const bool shaderReady = g_GLBatchShader.Init();
+    printf("shader pipeline: %s\n\n", shaderReady ? "available" : "NOT available");
+
     for (int i = 0; i < sceneCount; i++)
     {
         std::vector<unsigned char> immediate, batched;
         Render(SCENES[i].fn, false, immediate);
+
+        g_GLBatch.UseShaders = false;
         Render(SCENES[i].fn, true, batched);
 
         long differing = 0;
@@ -268,13 +274,43 @@ int main(int, char **)
             }
         }
 
-        const bool ok = (differing == 0);
-        if (!ok)
+        bool ok = (differing == 0);
+
+        // And again through the shader and vertex buffer, which is what a Core
+        // profile or GLES 2.0 will have to use.
+        long shaderDiffering = 0;
+        int shaderWorst = 0;
+        if (shaderReady)
+        {
+            std::vector<unsigned char> shaded;
+            g_GLBatch.UseShaders = true;
+            Render(SCENES[i].fn, true, shaded);
+            g_GLBatch.UseShaders = false;
+
+            for (size_t p = 0; p < immediate.size(); p++)
+            {
+                int d = abs((int)immediate[p] - (int)shaded[p]);
+                if (d != 0)
+                {
+                    shaderDiffering++;
+                    if (d > shaderWorst)
+                        shaderWorst = d;
+                }
+            }
+        }
+
+        const bool shaderOk = !shaderReady || (shaderDiffering == 0);
+        if (!ok || !shaderOk)
             failures++;
 
-        printf("  %-38s %s", SCENES[i].name, ok ? "identical\n" : "");
+        printf("  %-38s arrays:%-10s shader:%s\n",
+               SCENES[i].name,
+               ok ? "identical" : "DIFFERS",
+               !shaderReady ? "skipped" : (shaderOk ? "identical" : "DIFFERS"));
         if (!ok)
-            printf("DIFFERS: %ld bytes, worst delta %d\n", differing, worst);
+            printf("      arrays differ: %ld bytes, worst %d\n", differing, worst);
+        if (!shaderOk)
+            printf("      shader differs: %ld bytes, worst %d\n", shaderDiffering, shaderWorst);
     }
 
     GLenum err = glGetError();

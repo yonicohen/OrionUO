@@ -1,4 +1,4 @@
-/***********************************************************************************
+﻿/***********************************************************************************
 **
 ** GLVertexBatch.cpp
 **
@@ -141,6 +141,12 @@ void CGLVertexBatch::End()
     if (count == 0)
         return;
 
+    if (UseShaders && g_GLBatchShader.Available())
+    {
+        DrawWithShader(count);
+        return;
+    }
+
     glEnableClientState(GL_VERTEX_ARRAY);
     glVertexPointer(2, GL_FLOAT, 0, &m_Positions[0]);
 
@@ -183,5 +189,41 @@ void CGLVertexBatch::End()
         glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 
     glDisableClientState(GL_VERTEX_ARRAY);
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
+void CGLVertexBatch::DrawWithShader(int count)
+{
+    // The shader reads a colour per vertex, so batches that never called Color()
+    // take the current fixed function colour - which is what the client sets
+    // around most draws, and what those vertices would have been drawn with.
+    GLfloat uniformColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    if (!m_Colored)
+        glGetFloatv(GL_CURRENT_COLOR, uniformColor);
+
+    const bool haveTexCoords = m_Textured && (int)(m_TexCoords.size() / 2) == count;
+    const bool haveColors = m_Colored && (int)(m_Colors.size() / 4) == count;
+
+    const int floatsPerVertex = 8; // position.xy, texcoord.uv, colour.rgba
+    m_Interleaved.clear();
+    m_Interleaved.reserve((size_t)count * floatsPerVertex);
+
+    for (int i = 0; i < count; i++)
+    {
+        m_Interleaved.push_back(m_Positions[i * 2 + 0]);
+        m_Interleaved.push_back(m_Positions[i * 2 + 1]);
+
+        m_Interleaved.push_back(haveTexCoords ? m_TexCoords[i * 2 + 0] : 0.0f);
+        m_Interleaved.push_back(haveTexCoords ? m_TexCoords[i * 2 + 1] : 0.0f);
+
+        for (int channel = 0; channel < 4; channel++)
+        {
+            m_Interleaved.push_back(
+                haveColors ? m_Colors[i * 4 + channel] : uniformColor[channel]);
+        }
+    }
+
+    g_GLBatchShader.Draw(
+        m_Mode, &m_Interleaved[0], count, floatsPerVertex, haveTexCoords);
 }
 //----------------------------------------------------------------------------------
