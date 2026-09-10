@@ -659,7 +659,7 @@ inline void CGLEngine::BindTexture(GLuint texture)
 //----------------------------------------------------------------------------------
 inline void CGLEngine::BindTexture(const CGLTexture &texture)
 {
-    BindTexture(texture);
+    BindTexture(texture.Texture);
     g_GLBatch.SetSourceSize(texture.Width, texture.Height);
 }
 //----------------------------------------------------------------------------------
