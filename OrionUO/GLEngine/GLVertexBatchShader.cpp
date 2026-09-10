@@ -276,7 +276,14 @@ void CGLVertexBatchShader::Draw(
         glUniform1i(m_UniformTextured, textured ? 1 : 0);
 
     if (m_UniformSourceSize >= 0)
-        glUniform2f(m_UniformSourceSize, (float)m_SourceWidth, (float)m_SourceHeight);
+    {
+        // Zero disables texel-space filtering in the shader, leaving plain bilinear.
+        const bool sharp = g_SharpFilter;
+        glUniform2f(
+            m_UniformSourceSize,
+            sharp ? (float)m_SourceWidth : 0.0f,
+            sharp ? (float)m_SourceHeight : 0.0f);
+    }
 
     if (m_UniformLighting >= 0)
     {

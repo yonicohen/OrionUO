@@ -123,6 +123,10 @@ int main(int argc, char **argv)
             g_isHeadless = true;
         else if (!strcmp(argv[i], "--nocrypt"))
             g_EncryptionType = ET_NOCRYPT;
+        else if (!strcmp(argv[i], "--noupscale"))
+            g_UpscaleArt = false;
+        else if (!strcmp(argv[i], "--smoothfilter"))
+            g_SharpFilter = false;
     }
 
     if (SDL_Init(SDL_INIT_TIMER) < 0)

@@ -45,5 +45,9 @@ void Double32(const uint *pixels, int width, int height, std::vector<uint> &out)
 // Off turns every texture back to its original resolution on the next load.
 extern bool g_UpscaleArt;
 //----------------------------------------------------------------------------------
+// Off falls back to ordinary bilinear, which blends UO's dithering into a smooth
+// tone instead of keeping it crisp. Which reads better depends on the artwork.
+extern bool g_SharpFilter;
+//----------------------------------------------------------------------------------
 #endif
 //----------------------------------------------------------------------------------
