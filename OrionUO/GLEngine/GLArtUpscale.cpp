@@ -10,6 +10,7 @@
 #include "stdafx.h"
 //----------------------------------------------------------------------------------
 bool g_UpscaleArt = true;
+bool g_SharpFilter = true;
 //----------------------------------------------------------------------------------
 namespace GLArtUpscale
 {
@@ -38,11 +39,17 @@ static void Double(const T *pixels, int width, int height, std::vector<T> &out)
         {
             const T center = pixels[y * width + x];
 
-            // Edges clamp to the centre, so borders are simply doubled.
-            const T up = (y > 0) ? pixels[(y - 1) * width + x] : center;
-            const T down = (y < height - 1) ? pixels[(y + 1) * width + x] : center;
-            const T left = (x > 0) ? pixels[y * width + (x - 1)] : center;
-            const T right = (x < width - 1) ? pixels[y * width + (x + 1)] : center;
+            // Wrap at the edges rather than clamping. Several gumps - the login
+            // screen's background among them - are drawn tiled, with texture
+            // coordinates past 1.0 and GL_REPEAT doing the repeating, so the
+            // pixel neighbouring the last column really is the first column.
+            // Clamping instead invents an edge that is not there and breaks the
+            // seam between tiles. For art that is not tiled this only affects the
+            // outermost pixel, which is transparent on virtually every sprite.
+            const T up = pixels[((y + height - 1) % height) * width + x];
+            const T down = pixels[((y + 1) % height) * width + x];
+            const T left = pixels[y * width + ((x + width - 1) % width)];
+            const T right = pixels[y * width + ((x + 1) % width)];
 
             T topLeft = center;
             T topRight = center;
