@@ -332,19 +332,28 @@ void CGLEngine::GL1_BindTexture16(CGLTexture &texture, int width, int height, pu
     // is what the world is drawn at, the two are indistinguishable.
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    // Upload at doubled resolution where it is worth it. Width and Height below
+    // stay logical, so nothing above the renderer sees a difference.
+    std::vector<ushort> upscaled;
+    if (texture.AllowUpscale)
+        GLArtUpscale::Double16(pixels, width, height, upscaled);
+    const bool doubled = !upscaled.empty();
+
     glTexImage2D(
         GL_TEXTURE_2D,
         0,
         GL_RGB5_A1,
-        width,
-        height,
+        doubled ? width * 2 : width,
+        doubled ? height * 2 : height,
         0,
         GL_BGRA,
         GL_UNSIGNED_SHORT_1_5_5_5_REV,
-        pixels);
+        doubled ? &upscaled[0] : pixels);
 
     texture.Width = width;
     texture.Height = height;
+    texture.TexelWidth = doubled ? width * 2 : width;
+    texture.TexelHeight = doubled ? height * 2 : height;
     texture.Texture = tex;
 
     if (IgnoreHitMap)
@@ -376,11 +385,26 @@ void CGLEngine::GL1_BindTexture32(CGLTexture &texture, int width, int height, pu
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
+    std::vector<uint> upscaled;
+    if (texture.AllowUpscale)
+        GLArtUpscale::Double32(pixels, width, height, upscaled);
+    const bool doubled = !upscaled.empty();
+
     glTexImage2D(
-        GL_TEXTURE_2D, 0, GL_RGBA4, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8, pixels);
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA4,
+        doubled ? width * 2 : width,
+        doubled ? height * 2 : height,
+        0,
+        GL_BGRA,
+        GL_UNSIGNED_INT_8_8_8_8,
+        doubled ? &upscaled[0] : pixels);
 
     texture.Width = width;
     texture.Height = height;
+    texture.TexelWidth = doubled ? width * 2 : width;
+    texture.TexelHeight = doubled ? height * 2 : height;
     texture.Texture = tex;
 
     if (IgnoreHitMap)
@@ -660,7 +684,9 @@ inline void CGLEngine::BindTexture(GLuint texture)
 inline void CGLEngine::BindTexture(const CGLTexture &texture)
 {
     BindTexture(texture.Texture);
-    g_GLBatch.SetSourceSize(texture.Width, texture.Height);
+    g_GLBatch.SetSourceSize(
+        (texture.TexelWidth > 0) ? texture.TexelWidth : texture.Width,
+        (texture.TexelHeight > 0) ? texture.TexelHeight : texture.Height);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::DrawLine(int x, int y, int targetX, int targetY)

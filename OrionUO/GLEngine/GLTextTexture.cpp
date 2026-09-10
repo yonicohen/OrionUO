@@ -14,6 +14,7 @@
 CGLTextTexture::CGLTextTexture()
     : CGLTexture()
 {
+    AllowUpscale = false;
 }
 //----------------------------------------------------------------------------------
 CGLTextTexture::~CGLTextTexture()
