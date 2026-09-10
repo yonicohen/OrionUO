@@ -313,7 +313,10 @@ void CGLEngine::GL1_BindTexture16(CGLTexture &texture, int width, int height, pu
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // Linear magnification: the pre-game screens are 640x480 artwork scaled up
+    // to fill the window, and GL_NEAREST makes that visibly blocky. At 1:1, which
+    // is what the world is drawn at, the two are indistinguishable.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexImage2D(
         GL_TEXTURE_2D,
@@ -356,7 +359,7 @@ void CGLEngine::GL1_BindTexture32(CGLTexture &texture, int width, int height, pu
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
     glTexImage2D(
