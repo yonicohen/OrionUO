@@ -34,6 +34,18 @@ public:
     CGLTexture();
     virtual ~CGLTexture();
 
+    // Text is excluded from upscaling. EPX assumes flat-coloured pixel art and
+    // rounds a corner wherever neighbours agree diagonally; glyphs are
+    // anti-aliased and carry a drop shadow, so that rule fires along every soft
+    // edge and smears them into blobs.
+    bool AllowUpscale{ true };
+
+    // Size actually uploaded, which is larger than Width/Height when the art was
+    // upscaled. Width/Height stay logical so layout and hit testing are unchanged;
+    // only the shader, which filters in texel space, needs the real size.
+    int TexelWidth{ 0 };
+    int TexelHeight{ 0 };
+
     GLuint Texture{ 0 };
 
     HIT_MAP_TYPE m_HitMap;

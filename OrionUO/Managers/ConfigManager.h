@@ -11,6 +11,15 @@
 #define CONFIGMANAGER_H
 //----------------------------------------------------------------------------------
 //!Класс менеджера конфига
+// Set by --gridcontainers, so the layout can be tried before there is any UI
+// for it and without a saved profile.
+extern bool g_ForceGridContainers;
+//----------------------------------------------------------------------------------
+// Backing art for a gridded container. The Character Status frame itself is fixed
+// size artwork and cannot be stretched to fit, so this is a resizepic in a similar
+// style. Overridable with --gridbg to compare candidates without a rebuild.
+extern ushort g_GridContainerBackground;
+//----------------------------------------------------------------------------------
 class CConfigManager
 {
 protected:
@@ -18,7 +27,11 @@ protected:
     bool m_Music = false;
     uchar m_SoundVolume = 255;
     uchar m_MusicVolume = 255;
-    uchar m_ClientFPS = 32;
+    // 32 was a reasonable default when this client was written and is not one
+    // now: it renders at half the rate of a 60Hz panel and a quarter of a 120Hz
+    // one, on a game that costs very little to draw. 100 is 10ms a frame, which
+    // the millisecond frame timer can express exactly.
+    uchar m_ClientFPS = 100;
     bool m_UseScaling = false;
     uchar m_DrawStatusState = 0;
     bool m_DrawStumps = false;
@@ -38,6 +51,7 @@ protected:
     bool m_UseGlobalMapLayer = false;
     bool m_NoDrawRoofs = false;
     bool m_UseGLListsForInterface = false;
+    bool m_UseGridContainers = false;
     uchar m_PingTimer = 10;
     uchar m_ItemPropertiesMode = OPM_FOLLOW_MOUSE;
     bool m_ItemPropertiesIcon = false;
@@ -215,13 +229,12 @@ public:
     bool GetNoDrawRoofs() { return m_NoDrawRoofs; };
     void SetNoDrawRoofs(bool val);
 
-#ifdef ORION_GLES
-    // GLES has no display lists at all. The option stays settable so the saved
-    // config round-trips, but the renderer must never take that path.
-    bool GetUseGLListsForInterface() { return false; };
-#else
     bool GetUseGLListsForInterface() { return m_UseGLListsForInterface; };
-#endif
+
+    // Lays container contents out in fixed cells instead of at the free
+    // coordinates the server sends for each item.
+    bool GetUseGridContainers() { return m_UseGridContainers || g_ForceGridContainers; };
+    void SetUseGridContainers(bool val) { m_UseGridContainers = val; };
     void SetUseGLListsForInterface(bool val);
 
     uchar GetPingTimer() { return m_PingTimer; };

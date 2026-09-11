@@ -2058,6 +2058,7 @@ void COrion::ServerSelection(int pos)
 //----------------------------------------------------------------------------------
 // True for loopback and the RFC1918 ranges, i.e. addresses that cannot be reached
 // from outside the server's own network.
+
 static bool IsPrivateAddress(const char *ip)
 {
     if (ip == nullptr)

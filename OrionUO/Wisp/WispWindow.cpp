@@ -31,6 +31,29 @@ CWindow::~CWindow()
 {
 }
 //----------------------------------------------------------------------------------
+float CWindow::GetPixelRatio() const
+{
+#if USE_WISP
+    return 1.0f;
+#else
+    if (m_window == nullptr)
+        return 1.0f;
+
+    int pixelWidth = 0;
+    int pixelHeight = 0;
+    SDL_GL_GetDrawableSize(m_window, &pixelWidth, &pixelHeight);
+
+    int pointWidth = 0;
+    int pointHeight = 0;
+    SDL_GetWindowSize(m_window, &pointWidth, &pointHeight);
+
+    if (pointWidth <= 0 || pixelWidth <= 0)
+        return 1.0f;
+
+    return (float)pixelWidth / (float)pointWidth;
+#endif
+}
+//----------------------------------------------------------------------------------
 void CWindow::SetSize(const WISP_GEOMETRY::CSize &size)
 {
 #if USE_WISP
@@ -238,17 +261,7 @@ bool CWindow::Create(
     // setting them afterwards silently leaves you without a usable context.
     // The renderer is fixed-function GL 2.x (it even uses display lists), so ask
     // for the legacy/compatibility profile rather than core.
-#if defined(ORION_GLES)
-    // Android has no desktop GL. Ask for a GLES 1.1 context specifically: SDL
-    // defaults to loading libGLESv2, which cannot give us the fixed function
-    // pipeline the renderer is built on, and window creation then fails with
-    // 'Could not initialize OpenGL / GLES library'.
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-#else
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
-#endif
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 
@@ -258,13 +271,7 @@ bool CWindow::Create(
         SDL_WINDOWPOS_CENTERED,
         width,
         height,
-#if defined(ORION_GLES)
-        // Android gives the app one fullscreen surface; it is not resizable and
-        // the requested size is ignored in favour of the actual surface.
-        SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN);
-#else
-        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
-#endif
+        SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     if (!m_window)
     {
         SDL_LogError(SDL_LOG_CATEGORY_VIDEO, "Coult not create window: %s\n", SDL_GetError());

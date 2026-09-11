@@ -71,6 +71,3 @@ uo_debug.cfg
 # vertexbatch equivalence test binary
 tests/vertexbatch/vertexbatch-test
 tests/vertexbatch/*.dSYM/
-
-# Android cross-build output
-build-android/

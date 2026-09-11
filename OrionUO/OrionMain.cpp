@@ -123,6 +123,16 @@ int main(int argc, char **argv)
             g_isHeadless = true;
         else if (!strcmp(argv[i], "--nocrypt"))
             g_EncryptionType = ET_NOCRYPT;
+        else if (!strcmp(argv[i], "--noupscale"))
+            g_UpscaleArt = false;
+        else if (!strcmp(argv[i], "--smoothfilter"))
+            g_SharpFilter = false;
+        else if (!strcmp(argv[i], "--novsync"))
+            g_UseVSync = false;
+        else if (!strcmp(argv[i], "--gridcontainers"))
+            g_ForceGridContainers = true;
+        else if (!strcmp(argv[i], "--gridbg") && i + 1 < argc)
+            g_GridContainerBackground = (ushort)strtol(argv[++i], nullptr, 0);
     }
 
     if (SDL_Init(SDL_INIT_TIMER) < 0)

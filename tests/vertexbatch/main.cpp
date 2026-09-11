@@ -16,7 +16,13 @@
 #include <cstring>
 #include <vector>
 
+#include "GLMatrixStack.h"
+#include "GLVertexBatchShader.h"
 #include "GLVertexBatch.h"
+
+// Sharp filtering only differs from bilinear under magnification, and these
+// scenes render at 1:1, so either setting compares equally. On matches the client.
+bool g_SharpFilter = true;
 
 static const int WIDTH = 256;
 static const int HEIGHT = 256;
@@ -75,6 +81,7 @@ static void SceneCircleGradient(bool useBatch)
     glDisable(GL_TEXTURE_2D);
     glColor4f(1.0f, 0.25f, 0.5f, 1.0f);
     glTranslatef(128.0f, 128.0f, 0.0f);
+    g_GLMatrix.Translate(128.0f, 128.0f, 0.0f);
 
     const float radius = 100.0f;
     const float pi = (float)M_PI * 2.0f;
@@ -105,6 +112,7 @@ static void SceneCircleGradient(bool useBatch)
     }
 
     glTranslatef(-128.0f, -128.0f, 0.0f);
+    g_GLMatrix.Translate(-128.0f, -128.0f, 0.0f);
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
     glEnable(GL_TEXTURE_2D);
 }
@@ -114,6 +122,17 @@ static void SceneNormals(bool useBatch)
 {
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
+
+    // Set the same light the client sets at start-up. Relying on GL's defaults
+    // made this a test of whatever the driver happened to default to, which is
+    // how it passed on hardware and failed on the software renderer.
+    GLfloat lightPosition[] = { -1.0f, -1.0f, 0.5f, 0.0f };
+    glLightfv(GL_LIGHT0, GL_POSITION, lightPosition);
+    GLfloat lightAmbient[] = { 2.0f, 2.0f, 2.0f, 1.0f };
+    glLightfv(GL_LIGHT0, GL_AMBIENT, lightAmbient);
+    GLfloat modelAmbient[] = { 0.8f, 0.8f, 0.8f, 0.8f };
+    glLightModelfv(GL_LIGHT_MODEL_AMBIENT, modelAmbient);
+    glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_FALSE);
     if (useBatch)
     {
         g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
@@ -198,11 +217,19 @@ static void Render(SceneFn fn, bool useBatch, std::vector<unsigned char> &out)
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    // The reference path is set up with raw GL and the shader path with the
+    // matrix stack, deliberately. Driving both from the stack makes a fault in
+    // the shared projection cancel out between them - which is how this harness
+    // once reported five of five on a build that drew everything upside down.
+    // Comparing against GL means the stack's own maths is what is under test.
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
     glOrtho(0, WIDTH, HEIGHT, 0, -150, 150);
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
+
+    g_GLMatrix.Ortho(0.0f, (float)WIDTH, (float)HEIGHT, 0.0f, -150.0f, 150.0f);
+    g_GLMatrix.LoadIdentity();
 
     glEnable(GL_TEXTURE_2D);
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
@@ -249,10 +276,19 @@ int main(int, char **)
     int failures = 0;
     const int sceneCount = (int)(sizeof(SCENES) / sizeof(SCENES[0]));
 
+    // The stack normally mirrors into GL so the fixed function fallback keeps
+    // working. Here that would make it impossible for the two to disagree.
+    g_GLMatrix.SetForwardToGL(false);
+
+    const bool shaderReady = g_GLBatchShader.Init();
+    printf("shader pipeline: %s\n\n", shaderReady ? "available" : "NOT available");
+
     for (int i = 0; i < sceneCount; i++)
     {
         std::vector<unsigned char> immediate, batched;
         Render(SCENES[i].fn, false, immediate);
+
+        g_GLBatch.UseShaders = false;
         Render(SCENES[i].fn, true, batched);
 
         long differing = 0;
@@ -268,13 +304,64 @@ int main(int, char **)
             }
         }
 
-        const bool ok = (differing == 0);
-        if (!ok)
+        bool ok = (differing == 0);
+
+        // And again through the shader and vertex buffer, which is what a Core
+        // profile or GLES 2.0 will have to use.
+        long shaderDiffering = 0;
+        int shaderWorst = 0;
+        if (shaderReady)
+        {
+            std::vector<unsigned char> shaded;
+            g_GLBatch.UseShaders = true;
+            Render(SCENES[i].fn, true, shaded);
+            g_GLBatch.UseShaders = false;
+
+            for (size_t p = 0; p < immediate.size(); p++)
+            {
+                int d = abs((int)immediate[p] - (int)shaded[p]);
+                if (d != 0)
+                {
+                    shaderDiffering++;
+                    if (d > shaderWorst)
+                        shaderWorst = d;
+                }
+            }
+        }
+
+        // The matrix stack works in floats where the fixed function pipeline uses
+        // doubles internally, so a triangle edge can land on a different side of
+        // a pixel centre. That shows up as a handful of fully-wrong pixels along
+        // edges on a software rasterizer, while agreeing exactly on hardware.
+        //
+        // So the measure is how much of the image disagrees, not by how much: a
+        // real fault moves a large fraction of the frame. Injecting a Y-flip
+        // moves 40% or more; edge cases move well under a tenth of a percent.
+        const double differingFraction = (double)shaderDiffering / (double)immediate.size();
+        const bool shaderOk = !shaderReady || (differingFraction < 0.001);
+        if (!ok || !shaderOk)
             failures++;
 
-        printf("  %-38s %s", SCENES[i].name, ok ? "identical\n" : "");
+        const char *shaderVerdict = "skipped";
+        if (shaderReady)
+        {
+            if (shaderDiffering == 0)
+                shaderVerdict = "identical";
+            else if (shaderOk)
+                shaderVerdict = "edge pixels only";
+            else
+                shaderVerdict = "DIFFERS";
+        }
+
+        printf("  %-38s arrays:%-10s shader:%s\n",
+               SCENES[i].name,
+               ok ? "identical" : "DIFFERS",
+               shaderVerdict);
         if (!ok)
-            printf("DIFFERS: %ld bytes, worst delta %d\n", differing, worst);
+            printf("      arrays differ: %ld bytes, worst %d\n", differing, worst);
+        if (shaderReady && shaderDiffering != 0)
+            printf("      %ld byte(s) differ (%.4f%%), worst %d\n",
+                   shaderDiffering, differingFraction * 100.0, shaderWorst);
     }
 
     GLenum err = glGetError();

@@ -157,12 +157,13 @@ bool CGLFrameBuffer::Use()
 
         glViewport(0, 0, Texture.Width, Texture.Height);
 
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-
-        glOrtho(0.0, Texture.Width, 0.0, Texture.Height, -150.0, 150.0);
-
-        glMatrixMode(GL_MODELVIEW);
+        // Through the matrix stack, not raw GL: the shader takes its transform
+        // from the stack, so a projection set behind its back leaves gump
+        // contents drawn with the screen's projection instead of this one - and
+        // since the screen's is Y-flipped and this is not, they come out upside
+        // down. Note bottom and top are not swapped here: a framebuffer is
+        // rendered bottom-up and flipped back when its texture is drawn.
+        g_GLMatrix.Ortho(0.0f, (float)Texture.Width, 0.0f, (float)Texture.Height, -150.0f, 150.0f);
 
         result = true;
     }

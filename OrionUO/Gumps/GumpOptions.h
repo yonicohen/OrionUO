@@ -160,6 +160,7 @@ private:
     static const int ID_GO_P6_CHARACTER_BACKPACK_STYLE_SUEDE = 619;
     static const int ID_GO_P6_CHARACTER_BACKPACK_STYLE_POLAR_BEAR = 620;
     static const int ID_GO_P6_CHARACTER_BACKPACK_STYLE_GHOUL_SKIN = 621;
+    static const int ID_GO_P6_USE_GRID_CONTAINERS = 622;
 
     static const int ID_GO_P7_SCALE_SPEECH_DURATION = 700;
     static const int ID_GO_P7_SPEECH_COLOR = 701;

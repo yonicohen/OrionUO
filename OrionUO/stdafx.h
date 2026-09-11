@@ -48,6 +48,15 @@
 
 #include <time.h>
 #include <process.h>
+
+// Before windows.h, and in this order. windows.h pulls in the original
+// winsock.h, whose structs - sockaddr, fd_set, timeval and a dozen more - then
+// clash with winsock2.h wherever that is included later. Getting them in first
+// means windows.h sees the guards already set. ws2tcpip.h is what declares
+// inet_pton.
+#include <winsock2.h>
+#include <ws2tcpip.h>
+
 #include <Shlwapi.h>
 #include <Shellapi.h>
 #include <windows.h>
@@ -134,7 +143,9 @@ using namespace std;
 #include "GLEngine/GLShader.h"
 #include "GLEngine/GLVector.h"
 #include "GLEngine/GLFrameBuffer.h"
-#include "GLEngine/GLCompat.h"
+#include "GLEngine/GLMatrixStack.h"
+#include "GLEngine/GLArtUpscale.h"
+#include "GLEngine/GLVertexBatchShader.h"
 #include "GLEngine/GLVertexBatch.h"
 #include "GLEngine/GLEngine.h"
 

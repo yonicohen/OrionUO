@@ -136,7 +136,9 @@ UINT_LIST CScreenshotBuilder::GetScenePixels(int x, int y, int width, int height
 #else
     glReadPixels(
         x,
-        g_OrionWindow.GetSize().Height - y - height,
+        // glReadPixels works in framebuffer pixels, which on a high-DPI display
+        // is larger than the window's logical size.
+        (int)((g_OrionWindow.GetSize().Height - y - height) * g_OrionWindow.GetPixelRatio()),
         width,
         height,
         GL_BGRA,

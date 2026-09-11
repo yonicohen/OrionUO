@@ -122,11 +122,6 @@ bool CGLEngine::Install()
     }
 #endif
 
-#if defined(ORION_GLES)
-    // GLES needs no extension loader: the core entry points are exported
-    // directly by libGLESv1_CM, so there is no glewInit equivalent to call.
-    LOG("GLES v(%s)\n", glGetString(GL_VERSION));
-#else
     int glewInitResult = glewInit();
     LOG("glewInit() = %i fb=%i v(%s) (shader: %i)\n",
         glewInitResult,
@@ -135,22 +130,12 @@ bool CGLEngine::Install()
         GL_ARB_shader_objects);
     if (glewInitResult)
         return false;
-#endif
 
     LOG("Graphics Successfully Initialized\n");
     LOG("OpenGL Info:\n");
     LOG("    Version: %s\n", glGetString(GL_VERSION));
     LOG("     Vendor: %s\n", glGetString(GL_VENDOR));
     LOG("   Renderer: %s\n", glGetString(GL_RENDERER));
-#if defined(ORION_GLES)
-    // GLES 1.x has no shading language, and framebuffers are an extension, so
-    // ask the extension string rather than a loader's feature flags.
-    const char *extensions = (const char *)glGetString(GL_EXTENSIONS);
-    CanUseFrameBuffer =
-        (extensions != nullptr && strstr(extensions, "GL_OES_framebuffer_object") != nullptr);
-
-    CanUseBuffer = false;
-#else
     LOG("    Shading: %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
 
     CanUseFrameBuffer =
@@ -159,15 +144,9 @@ bool CGLEngine::Install()
 
     CanUseBuffer =
         (GL_VERSION_1_5 && glBindBuffer && glBufferData && glDeleteBuffers && glGenBuffers);
-#endif
 
     CanUseBuffer = false;
 
-#if !defined(ORION_GLES)
-// The GL2 path binds vertex buffer objects with GL_INT arrays, which GLES 1.x
-// does not accept as a vertex array type. It is dead code on every platform -
-// CanUseBuffer is hardcoded false above - so it is compiled out for Android
-// rather than ported.
     if (CanUseBuffer)
     {
         glGenBuffers(3, &PositionBuffer);
@@ -189,7 +168,6 @@ bool CGLEngine::Install()
         g_GL_DrawStretched_Ptr = &CGLEngine::GL2_DrawStretched;
         g_GL_DrawResizepic_Ptr = &CGLEngine::GL2_DrawResizepic;
     }
-#endif // !ORION_GLES
 
     LOG("g_UseFrameBuffer = %i; CanUseBuffer = %i\n", CanUseFrameBuffer, CanUseBuffer);
 
@@ -214,7 +192,25 @@ bool CGLEngine::Install()
     if (wglSwapIntervalEXT != NULL)
         wglSwapIntervalEXT(0);
 #else
-    SDL_GL_SetSwapInterval(0); // 1 vsync
+    // Frames are paced by the client's own timer, so vsync is a second limiter on
+    // top of it rather than the only one. What it buys is the absence of tearing:
+    // without it a swap lands mid-scanout whenever the frame timer and the display
+    // refresh disagree, which they usually do.
+    //
+    // Late swap tearing first - it syncs when it can and skips the wait when a
+    // frame runs long, rather than dropping to half rate - and plain vsync if the
+    // driver has no such thing.
+    if (g_UseVSync)
+    {
+        if (SDL_GL_SetSwapInterval(-1) < 0)
+            SDL_GL_SetSwapInterval(1);
+    }
+    else
+        SDL_GL_SetSwapInterval(0);
+
+    LOG("VSync: %s (swap interval %d)\n",
+        g_UseVSync ? "on" : "off",
+        SDL_GL_GetSwapInterval());
 #endif
 
     glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
@@ -236,6 +232,13 @@ bool CGLEngine::Install()
     glLightModelfv(GL_LIGHT_MODEL_AMBIENT, &lightAmbientValues[0]);
 
     glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_FALSE);
+
+    // Build the shader pipeline that CGLVertexBatch can draw through. It is the
+    // path a Core profile or GLES 2.0 will require; drawing through it now, in a
+    // context that still has the fixed function pipeline, is what makes the two
+    // comparable. Falling back costs nothing if the driver refuses it.
+    g_GLBatch.UseShaders = g_GLBatchShader.Init();
+    LOG("Vertex batch path: %s\n", g_GLBatch.UseShaders ? "shader + vertex buffer" : "fixed function arrays");
 
     ViewPort(0, 0, g_OrionWindow.GetSize().Width, g_OrionWindow.GetSize().Height);
 
@@ -270,7 +273,9 @@ void CGLEngine::UpdateRect()
     int height = cr.bottom - cr.top;
 #else
     int width, height;
-    SDL_GL_GetDrawableSize(g_OrionWindow.m_window, &width, &height);
+    // Logical points, not framebuffer pixels: the scene scale and the mouse
+    // both work in points, and ApplySceneProjection converts to pixels.
+    SDL_GetWindowSize(g_OrionWindow.m_window, &width, &height);
 #endif
 
     // In the world the UI is drawn at window resolution, one scene unit per
@@ -289,9 +294,10 @@ void CGLEngine::UpdateRect()
         const int scaledHeight = (int)(SceneHeight * SceneScale);
         SceneOffsetX = (width - scaledWidth) / 2;
         SceneOffsetY = (height - scaledHeight) / 2;
-        LOG("UpdateRect: window %dx%d state=%d scale=%.2f offset=%d,%d\n",
+        LOG("UpdateRect: window %dx%d (x%.1f dpi) state=%d scale=%.2f offset=%d,%d\n",
             width,
             height,
+            g_OrionWindow.GetPixelRatio(),
             (int)g_GameState,
             SceneScale,
             SceneOffsetX,
@@ -310,7 +316,11 @@ void CGLEngine::UpdateRect()
         SceneScale = 1.0f;
         SceneOffsetX = 0;
         SceneOffsetY = 0;
-        LOG("UpdateRect: window %dx%d state=%d (in world, 1:1)\n", width, height, (int)g_GameState);
+        LOG("UpdateRect: window %dx%d (x%.1f dpi) state=%d (in world, 1:1)\n",
+            width,
+            height,
+            g_OrionWindow.GetPixelRatio(),
+            (int)g_GameState);
         ViewPort(0, 0, width, height);
     }
 
@@ -339,44 +349,29 @@ void CGLEngine::GL1_BindTexture16(CGLTexture &texture, int width, int height, pu
     // to fill the window, and GL_NEAREST makes that visibly blocky. At 1:1, which
     // is what the world is drawn at, the two are indistinguishable.
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-#if defined(ORION_GLES)
-    // GLES 1.x has neither GL_BGRA nor the _REV packed types, and requires the
-    // internal format to match the format. UO stores ARGB1555 - alpha in the top
-    // bit - which is what BGRA/1_5_5_5_REV reads. GLES offers RGBA5551, the same
-    // three five-bit fields shifted up one place with alpha moved to the bottom.
-    std::vector<ushort> converted((size_t)width * height);
-    for (size_t i = 0; i < converted.size(); i++)
-    {
-        const ushort argb = pixels[i];
-        converted[i] = (ushort)(((argb & 0x7FFF) << 1) | (argb >> 15));
-    }
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    // Upload at doubled resolution where it is worth it. Width and Height below
+    // stay logical, so nothing above the renderer sees a difference.
+    std::vector<ushort> upscaled;
+    if (texture.AllowUpscale)
+        GLArtUpscale::Double16(pixels, width, height, upscaled);
+    const bool doubled = !upscaled.empty();
 
-    glTexImage2D(
-        GL_TEXTURE_2D,
-        0,
-        GL_RGBA,
-        width,
-        height,
-        0,
-        GL_RGBA,
-        GL_UNSIGNED_SHORT_5_5_5_1,
-        &converted[0]);
-#else
     glTexImage2D(
         GL_TEXTURE_2D,
         0,
         GL_RGB5_A1,
-        width,
-        height,
+        doubled ? width * 2 : width,
+        doubled ? height * 2 : height,
         0,
         GL_BGRA,
         GL_UNSIGNED_SHORT_1_5_5_5_REV,
-        pixels);
-#endif
+        doubled ? &upscaled[0] : pixels);
 
     texture.Width = width;
     texture.Height = height;
+    texture.TexelWidth = doubled ? width * 2 : width;
+    texture.TexelHeight = doubled ? height * 2 : height;
     texture.Texture = tex;
 
     if (IgnoreHitMap)
@@ -406,31 +401,28 @@ void CGLEngine::GL1_BindTexture32(CGLTexture &texture, int width, int height, pu
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-#if defined(ORION_GLES)
-    // BGRA/UNSIGNED_INT_8_8_8_8 reads each word as B<<24|G<<16|R<<8|A. GLES only
-    // takes RGBA as four bytes in memory, so unpack explicitly rather than
-    // reordering the word, which would depend on host endianness.
-    std::vector<uchar> converted((size_t)width * height * 4);
-    for (size_t i = 0; i < (size_t)width * height; i++)
-    {
-        const uint value = pixels[i];
-        converted[i * 4 + 0] = (uchar)((value >> 8) & 0xFF);  // R
-        converted[i * 4 + 1] = (uchar)((value >> 16) & 0xFF); // G
-        converted[i * 4 + 2] = (uchar)((value >> 24) & 0xFF); // B
-        converted[i * 4 + 3] = (uchar)(value & 0xFF);         // A
-    }
+    std::vector<uint> upscaled;
+    if (texture.AllowUpscale)
+        GLArtUpscale::Double32(pixels, width, height, upscaled);
+    const bool doubled = !upscaled.empty();
 
     glTexImage2D(
-        GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, &converted[0]);
-#else
-    glTexImage2D(
-        GL_TEXTURE_2D, 0, GL_RGBA4, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8, pixels);
-#endif
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA4,
+        doubled ? width * 2 : width,
+        doubled ? height * 2 : height,
+        0,
+        GL_BGRA,
+        GL_UNSIGNED_INT_8_8_8_8,
+        doubled ? &upscaled[0] : pixels);
 
     texture.Width = width;
     texture.Height = height;
+    texture.TexelWidth = doubled ? width * 2 : width;
+    texture.TexelHeight = doubled ? height * 2 : height;
     texture.Texture = tex;
 
     if (IgnoreHitMap)
@@ -450,11 +442,6 @@ void CGLEngine::GL1_BindTexture32(CGLTexture &texture, int width, int height, pu
     }
 }
 //----------------------------------------------------------------------------------
-#if !defined(ORION_GLES)
-// The GL2 path binds vertex buffer objects with GL_INT arrays, which GLES 1.x
-// does not accept as a vertex array type. It is dead code on every platform -
-// CanUseBuffer is hardcoded false above - so it is compiled out for Android
-// rather than ported.
 void CGLEngine::GL2_CreateArrays(CGLTexture &texture, int width, int height)
 {
     WISPFUN_DEBUG("c29_f8");
@@ -489,7 +476,6 @@ void CGLEngine::GL2_BindTexture32(CGLTexture &texture, int width, int height, pu
     GL1_BindTexture32(texture, width, height, pixels);
     GL2_CreateArrays(texture, width, height);
 }
-#endif // !ORION_GLES
 //----------------------------------------------------------------------------------
 void CGLEngine::BeginDraw()
 {
@@ -497,7 +483,10 @@ void CGLEngine::BeginDraw()
     Drawing = true;
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-    glLoadIdentity();
+
+    // Resets the stack's modelview as well as GL's. Without this ours would
+    // accumulate every translation ever applied, since nothing else clears it.
+    g_GLMatrix.LoadIdentity();
 
     glDisable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
@@ -559,9 +548,17 @@ void CGLEngine::EndStencil()
 void CGLEngine::ViewPortScaled(int x, int y, int width, int height)
 {
     WISPFUN_DEBUG("c29_f15");
-    glViewport(x, g_OrionWindow.GetSize().Height - y - height, width, height);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
+    // The viewport is in framebuffer pixels; everything drawn through the
+    // projection below stays in logical points, so on a high-DPI display the
+    // same drawing lands on four times as many pixels and nothing that lays out
+    // the UI has to know.
+    const float pixelRatio = g_OrionWindow.GetPixelRatio();
+    glViewport(
+        (int)(x * pixelRatio),
+        (int)((g_OrionWindow.GetSize().Height - y - height) * pixelRatio),
+        (int)(width * pixelRatio),
+        (int)(height * pixelRatio));
+
 
     GLdouble left = (GLdouble)x;
     GLdouble right = (GLdouble)(width + x);
@@ -574,18 +571,23 @@ void CGLEngine::ViewPortScaled(int x, int y, int width, int height)
     left = (left * g_GlobalScale) - (newRight - right);
     top = (top * g_GlobalScale) - (newBottom - bottom);
 
-    glOrtho(left, newRight, newBottom, top, -150.0, 150.0);
-    glMatrixMode(GL_MODELVIEW);
+    g_GLMatrix.Ortho((float)left, (float)newRight, (float)newBottom, (float)top, -150.0f, 150.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::ViewPort(int x, int y, int width, int height)
 {
     WISPFUN_DEBUG("c29_f16");
-    glViewport(x, g_OrionWindow.GetSize().Height - y - height, width, height);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(x, width + x, height + y, y, -150.0, 150.0);
-    glMatrixMode(GL_MODELVIEW);
+    // The viewport is in framebuffer pixels; everything drawn through the
+    // projection below stays in logical points, so on a high-DPI display the
+    // same drawing lands on four times as many pixels and nothing that lays out
+    // the UI has to know.
+    const float pixelRatio = g_OrionWindow.GetPixelRatio();
+    glViewport(
+        (int)(x * pixelRatio),
+        (int)((g_OrionWindow.GetSize().Height - y - height) * pixelRatio),
+        (int)(width * pixelRatio),
+        (int)(height * pixelRatio));
+    g_GLMatrix.Ortho((float)x, (float)(width + x), (float)(height + y), (float)y, -150.0f, 150.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::ApplySceneProjection()
@@ -596,23 +598,29 @@ void CGLEngine::ApplySceneProjection()
     // release a framebuffer every frame and each release lands in RestorePort.
     if (g_GameState < GS_GAME && SceneScale > 0.0f)
     {
+        const float pixelRatio = g_OrionWindow.GetPixelRatio();
         glViewport(
-            SceneOffsetX,
-            SceneOffsetY,
-            (int)(SceneWidth * SceneScale),
-            (int)(SceneHeight * SceneScale));
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        glOrtho(0.0, (GLdouble)SceneWidth, (GLdouble)SceneHeight, 0.0, -150.0, 150.0);
-        glMatrixMode(GL_MODELVIEW);
+            (int)(SceneOffsetX * pixelRatio),
+            (int)(SceneOffsetY * pixelRatio),
+            (int)(SceneWidth * SceneScale * pixelRatio),
+            (int)(SceneHeight * SceneScale * pixelRatio));
+        g_GLMatrix.Ortho(0.0f, (float)SceneWidth, (float)SceneHeight, 0.0f, -150.0f, 150.0f);
         return;
     }
 
-    glViewport(0, 0, g_OrionWindow.GetSize().Width, g_OrionWindow.GetSize().Height);
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0.0, g_OrionWindow.GetSize().Width, g_OrionWindow.GetSize().Height, 0.0, -150.0, 150.0);
-    glMatrixMode(GL_MODELVIEW);
+    const float windowPixelRatio = g_OrionWindow.GetPixelRatio();
+    glViewport(
+        0,
+        0,
+        (int)(g_OrionWindow.GetSize().Width * windowPixelRatio),
+        (int)(g_OrionWindow.GetSize().Height * windowPixelRatio));
+    g_GLMatrix.Ortho(
+        0.0f,
+        (float)g_OrionWindow.GetSize().Width,
+        (float)g_OrionWindow.GetSize().Height,
+        0.0f,
+        -150.0f,
+        150.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::RestorePort()
@@ -689,6 +697,14 @@ inline void CGLEngine::BindTexture(GLuint texture)
     }
 }
 //----------------------------------------------------------------------------------
+inline void CGLEngine::BindTexture(const CGLTexture &texture)
+{
+    BindTexture(texture.Texture);
+    g_GLBatch.SetSourceSize(
+        (texture.TexelWidth > 0) ? texture.TexelWidth : texture.Width,
+        (texture.TexelHeight > 0) ? texture.TexelHeight : texture.Height);
+}
+//----------------------------------------------------------------------------------
 void CGLEngine::DrawLine(int x, int y, int targetX, int targetY)
 {
     WISPFUN_DEBUG("c29_f26");
@@ -707,7 +723,7 @@ void CGLEngine::DrawPolygone(int x, int y, int width, int height)
     WISPFUN_DEBUG("c29_f27");
     glDisable(GL_TEXTURE_2D);
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     g_GLBatch.Begin(GL_TRIANGLE_STRIP, false);
     g_GLBatch.Vertex(0, height);
@@ -716,7 +732,7 @@ void CGLEngine::DrawPolygone(int x, int y, int width, int height)
     g_GLBatch.Vertex(width, 0);
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 
     glEnable(GL_TEXTURE_2D);
 }
@@ -726,7 +742,7 @@ void CGLEngine::DrawCircle(float x, float y, float radius, int gradientMode)
     WISPFUN_DEBUG("c29_f28");
     glDisable(GL_TEXTURE_2D);
 
-    glTranslatef(x, y, 0.0f);
+    g_GLMatrix.Translate(x, y, 0.0f);
 
     g_GLBatch.Begin(GL_TRIANGLE_FAN, false);
 
@@ -745,7 +761,7 @@ void CGLEngine::DrawCircle(float x, float y, float radius, int gradientMode)
 
     g_GLBatch.End();
 
-    glTranslatef(-x, -y, 0.0f);
+    g_GLMatrix.Translate(-x, -y, 0.0f);
 
     glEnable(GL_TEXTURE_2D);
 }
@@ -753,7 +769,7 @@ void CGLEngine::DrawCircle(float x, float y, float radius, int gradientMode)
 void CGLEngine::GL1_DrawLandTexture(const CGLTexture &texture, int x, int y, CLandObject *land)
 {
     WISPFUN_DEBUG("c29_f29");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     float translateX = x - 22.0f;
     float translateY = y - 22.0f;
@@ -761,7 +777,7 @@ void CGLEngine::GL1_DrawLandTexture(const CGLTexture &texture, int x, int y, CLa
     const RECT &rc = land->m_Rect;
     CVector *normals = land->m_Normals;
 
-    glTranslatef(translateX, translateY, 0.0f);
+    g_GLMatrix.Translate(translateX, translateY, 0.0f);
 
     g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
     g_GLBatch.Normal((GLfloat)normals[0].X, (GLfloat)normals[0].Y, (GLfloat)normals[0].Z);
@@ -781,18 +797,18 @@ void CGLEngine::GL1_DrawLandTexture(const CGLTexture &texture, int x, int y, CLa
     g_GLBatch.Vertex(22, 44 - rc.right); //v
     g_GLBatch.End();
 
-    glTranslatef(-translateX, -translateY, 0.0f);
+    g_GLMatrix.Translate(-translateX, -translateY, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_Draw(const CGLTexture &texture, int x, int y)
 {
     WISPFUN_DEBUG("c29_f30");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
     g_GLBatch.TexCoord(0, 1);
@@ -805,22 +821,22 @@ void CGLEngine::GL1_Draw(const CGLTexture &texture, int x, int y)
     g_GLBatch.Vertex(width, 0);
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_DrawRotated(const CGLTexture &texture, int x, int y, float angle)
 {
     WISPFUN_DEBUG("c29_f31");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
 
     GLfloat translateY = (GLfloat)(y - height);
 
-    glTranslatef((GLfloat)x, translateY, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, translateY, 0.0f);
 
-    glRotatef(angle, 0.0f, 0.0f, 1.0f);
+    g_GLMatrix.Rotate(angle, 0.0f, 0.0f, 1.0f);
 
     g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
     g_GLBatch.TexCoord(0, 1);
@@ -833,19 +849,19 @@ void CGLEngine::GL1_DrawRotated(const CGLTexture &texture, int x, int y, float a
     g_GLBatch.Vertex(width, 0);
     g_GLBatch.End();
 
-    glRotatef(angle, 0.0f, 0.0f, -1.0f);
-    glTranslatef((GLfloat)-x, -translateY, 0.0f);
+    g_GLMatrix.Rotate(angle, 0.0f, 0.0f, -1.0f);
+    g_GLMatrix.Translate((GLfloat)-x, -translateY, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_DrawMirrored(const CGLTexture &texture, int x, int y, bool mirror)
 {
     WISPFUN_DEBUG("c29_f32");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
 
@@ -874,16 +890,16 @@ void CGLEngine::GL1_DrawMirrored(const CGLTexture &texture, int x, int y, bool m
 
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_DrawSitting(
     const CGLTexture &texture, int x, int y, bool mirror, float h3mod, float h6mod, float h9mod)
 {
     WISPFUN_DEBUG("c29_f33");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     float width = (float)texture.Width;
     float height = (float)texture.Height;
@@ -990,20 +1006,20 @@ void CGLEngine::GL1_DrawSitting(
 
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_DrawShadow(const CGLTexture &texture, int x, int y, bool mirror)
 {
     WISPFUN_DEBUG("c29_f34");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     float width = (float)texture.Width;
     float height = texture.Height / 2.0f;
 
     GLfloat translateY = (GLfloat)(y + height * 0.75);
 
-    glTranslatef((GLfloat)x, translateY, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, translateY, 0.0f);
 
     g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
 
@@ -1034,19 +1050,19 @@ void CGLEngine::GL1_DrawShadow(const CGLTexture &texture, int x, int y, bool mir
 
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, -translateY, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, -translateY, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_DrawStretched(
     const CGLTexture &texture, int x, int y, int drawWidth, int drawHeight)
 {
     WISPFUN_DEBUG("c29_f35");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     float drawCountX = drawWidth / (float)width;
     float drawCountY = drawHeight / (float)height;
@@ -1062,7 +1078,7 @@ void CGLEngine::GL1_DrawStretched(
     g_GLBatch.Vertex(drawWidth, 0);
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_DrawResizepic(CGLTexture **th, int x, int y, int width, int height)
@@ -1171,7 +1187,7 @@ void CGLEngine::GL1_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
         if (drawWidth < 1 || drawHeight < 1)
             continue;
 
-        glTranslatef((GLfloat)drawX, (GLfloat)drawY, 0.0f);
+        g_GLMatrix.Translate((GLfloat)drawX, (GLfloat)drawY, 0.0f);
 
         g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
         g_GLBatch.TexCoord(0.0f, drawCountY);
@@ -1184,25 +1200,20 @@ void CGLEngine::GL1_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
         g_GLBatch.Vertex(drawWidth, 0);
         g_GLBatch.End();
 
-        glTranslatef((GLfloat)-drawX, (GLfloat)-drawY, 0.0f);
+        g_GLMatrix.Translate((GLfloat)-drawX, (GLfloat)-drawY, 0.0f);
     }
 }
 
 //----------------------------------------------------------------------------------
-#if !defined(ORION_GLES)
-// The GL2 path binds vertex buffer objects with GL_INT arrays, which GLES 1.x
-// does not accept as a vertex array type. It is dead code on every platform -
-// CanUseBuffer is hardcoded false above - so it is compiled out for Android
-// rather than ported.
 void CGLEngine::GL2_DrawLandTexture(const CGLTexture &texture, int x, int y, CLandObject *land)
 {
     WISPFUN_DEBUG("c29_f37");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     float translateX = x - 22.0f;
     float translateY = y - 22.0f;
 
-    glTranslatef(translateX, translateY, 0.0f);
+    g_GLMatrix.Translate(translateX, translateY, 0.0f);
 
     glBindBuffer(GL_ARRAY_BUFFER, land->VertexBuffer);
     glVertexPointer(2, GL_INT, 0, (PVOID)0);
@@ -1219,18 +1230,18 @@ void CGLEngine::GL2_DrawLandTexture(const CGLTexture &texture, int x, int y, CLa
 
     glDisableClientState(GL_NORMAL_ARRAY);
 
-    glTranslatef(-translateX, -translateY, 0.0f);
+    g_GLMatrix.Translate(-translateX, -translateY, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL2_Draw(const CGLTexture &texture, int x, int y)
 {
     WISPFUN_DEBUG("c29_f38");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     glBindBuffer(GL_ARRAY_BUFFER, texture.VertexBuffer);
     glVertexPointer(2, GL_INT, 0, (PVOID)0);
@@ -1240,22 +1251,22 @@ void CGLEngine::GL2_Draw(const CGLTexture &texture, int x, int y)
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL2_DrawRotated(const CGLTexture &texture, int x, int y, float angle)
 {
     WISPFUN_DEBUG("c29_f39");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
 
     GLfloat translateY = (GLfloat)(y - height);
 
-    glTranslatef((GLfloat)x, translateY, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, translateY, 0.0f);
 
-    glRotatef(angle, 0.0f, 0.0f, 1.0f);
+    g_GLMatrix.Rotate(angle, 0.0f, 0.0f, 1.0f);
 
     glBindBuffer(GL_ARRAY_BUFFER, texture.VertexBuffer);
     glVertexPointer(2, GL_INT, 0, (PVOID)0);
@@ -1265,19 +1276,19 @@ void CGLEngine::GL2_DrawRotated(const CGLTexture &texture, int x, int y, float a
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-    glRotatef(angle, 0.0f, 0.0f, -1.0f);
-    glTranslatef((GLfloat)-x, -translateY, 0.0f);
+    g_GLMatrix.Rotate(angle, 0.0f, 0.0f, -1.0f);
+    g_GLMatrix.Translate((GLfloat)-x, -translateY, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL2_DrawMirrored(const CGLTexture &texture, int x, int y, bool mirror)
 {
     WISPFUN_DEBUG("c29_f40");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     if (mirror)
         glBindBuffer(GL_ARRAY_BUFFER, texture.MirroredVertexBuffer);
@@ -1291,16 +1302,16 @@ void CGLEngine::GL2_DrawMirrored(const CGLTexture &texture, int x, int y, bool m
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL2_DrawSitting(
     const CGLTexture &texture, int x, int y, bool mirror, float h3mod, float h6mod, float h9mod)
 {
     WISPFUN_DEBUG("c29_f41");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     float width = (float)texture.Width;
     float height = (float)texture.Height;
@@ -1407,20 +1418,20 @@ void CGLEngine::GL2_DrawSitting(
 
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL2_DrawShadow(const CGLTexture &texture, int x, int y, bool mirror)
 {
     WISPFUN_DEBUG("c29_f42");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     float width = (float)texture.Width;
     float height = texture.Height / 2.0f;
 
     GLfloat translateY = (GLfloat)(y + height * 0.75);
 
-    glTranslatef((GLfloat)x, translateY, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, translateY, 0.0f);
 
     float ratio = height / width;
     float verticles[8];
@@ -1456,19 +1467,19 @@ void CGLEngine::GL2_DrawShadow(const CGLTexture &texture, int x, int y, bool mir
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-    glTranslatef((GLfloat)-x, -translateY, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, -translateY, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL2_DrawStretched(
     const CGLTexture &texture, int x, int y, int drawWidth, int drawHeight)
 {
     WISPFUN_DEBUG("c29_f43");
-    BindTexture(texture.Texture);
+    BindTexture(texture);
 
     int width = texture.Width;
     int height = texture.Height;
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     float drawCountX = drawWidth / (float)width;
     float drawCountY = drawHeight / (float)height;
@@ -1484,7 +1495,7 @@ void CGLEngine::GL2_DrawStretched(
     g_GLBatch.Vertex(drawWidth, 0);
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL2_DrawResizepic(CGLTexture **th, int x, int y, int width, int height)
@@ -1585,7 +1596,7 @@ void CGLEngine::GL2_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
         if (drawWidth < 1 || drawHeight < 1)
             continue;
 
-        glTranslatef((GLfloat)drawX, (GLfloat)drawY, 0.0f);
+        g_GLMatrix.Translate((GLfloat)drawX, (GLfloat)drawY, 0.0f);
 
         g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
         g_GLBatch.TexCoord(0.0f, drawCountY);
@@ -1598,8 +1609,7 @@ void CGLEngine::GL2_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
         g_GLBatch.Vertex(drawWidth, 0);
         g_GLBatch.End();
 
-        glTranslatef((GLfloat)-drawX, (GLfloat)-drawY, 0.0f);
+        g_GLMatrix.Translate((GLfloat)-drawX, (GLfloat)-drawY, 0.0f);
     }
 }
 //----------------------------------------------------------------------------------
-#endif // !ORION_GLES

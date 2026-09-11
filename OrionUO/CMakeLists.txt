@@ -93,6 +93,9 @@ set(glengine_src
   GLEngine/GLTexture.cpp
   GLEngine/GLVector.cpp
   GLEngine/GLVertexBatch.cpp
+  GLEngine/GLVertexBatchShader.cpp
+  GLEngine/GLArtUpscale.cpp
+  GLEngine/GLMatrixStack.cpp
 )
 
 set(gui_src
@@ -411,7 +414,33 @@ else()
   add_executable(OrionUO ${SRCS} ${headers})
 endif()
 
-target_link_libraries(OrionUO PUBLIC ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} ${SDL2_MIXER_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENGL_LIBRARIES} ${FREEIMAGE_LIBRARIES} ${GLEW_LIBRARIES} ${THREAD})
+if(ORION_WINDOWS)
+  # Those variables come from find_package, which only runs on Unix here, so on
+  # Windows they are all empty and nothing gets linked - 76 unresolved externals.
+  # Windows builds against the import libraries committed under Dependencies/,
+  # the same ones the original #pragma comment(lib) lines named before CMake
+  # took over the build.
+  # DEP_LIB_DIR is set by the top level CMakeLists, next to the architecture it
+  # was chosen for, so the two cannot drift apart.
+  set(orion_deps_lib "${DEP_LIB_DIR}")
+
+  target_link_libraries(OrionUO PUBLIC
+    "${orion_deps_lib}SDL2.lib"
+    "${orion_deps_lib}SDL2main.lib"
+    "${orion_deps_lib}glew32.lib"
+    "${orion_deps_lib}FreeImage.lib"
+    "${orion_deps_lib}bass.lib"
+    "${orion_deps_lib}bassmidi.lib"
+    ${ZLIB_LIBRARIES}
+    opengl32
+    glu32
+    winmm
+    Shlwapi
+    ws2_32
+    Psapi)
+else()
+  target_link_libraries(OrionUO PUBLIC ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} ${SDL2_MIXER_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENGL_LIBRARIES} ${FREEIMAGE_LIBRARIES} ${GLEW_LIBRARIES} ${THREAD})
+endif()
 
 orion_precompile(OrionUO)
 

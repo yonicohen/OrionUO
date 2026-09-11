@@ -1,4 +1,4 @@
-/***********************************************************************************
+﻿/***********************************************************************************
 **
 ** FileManager.h
 **
@@ -144,6 +144,10 @@ private:
     static bool TryOpenFileStream(std::fstream &fileStream, const os_path &filePath);
 
     bool LoadUOPFile(CUopMappedFile &file, const char *fileName);
+
+    // Applies the group remapping in AnimationSequence.uop, which was being
+    // loaded and discarded.
+    void ProcessAnimationSequenceData();
 };
 //---------------------------------------------------------------------------
 extern CFileManager g_FileManager;
