@@ -1,4 +1,4 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+﻿// This is an open source non-commercial project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 /***********************************************************************************
 **
@@ -451,8 +451,88 @@ void CFileManager::TryReadUOPAnimations()
     readThread.detach();
 }
 //----------------------------------------------------------------------------------
+void CFileManager::ProcessAnimationSequenceData()
+{
+    // AnimationSequence.uop remaps animation groups per body: a creature whose
+    // art reuses another group's frames says so here. The file was being mapped
+    // at start-up and unloaded again without a byte being read, so those
+    // creatures animated with whatever group their index happened to hold.
+    //
+    // Every index below comes from the file, so every one is range checked. A
+    // bad or unexpected entry costs that entry, not the process.
+    int processed = 0;
+    int rejected = 0;
+
+    for (const auto &entry : m_AnimationSequence.m_Map)
+    {
+        UCHAR_LIST data = m_AnimationSequence.GetData(entry.second);
+        if (data.size() < 56)
+        {
+            rejected++;
+            continue;
+        }
+
+        SetData(reinterpret_cast<puchar>(&data[0]), data.size());
+
+        const uint animId = ReadUInt32LE();
+        if (animId >= MAX_ANIMATIONS_DATA_INDEX_COUNT)
+        {
+            rejected++;
+            continue;
+        }
+
+        CIndexAnimation &indexAnim = g_AnimationManager.m_DataIndex[animId];
+
+        Move(48); // unused in every file seen so far
+        const uint replaces = ReadUInt32LE();
+
+        // 48 and 68 are the human and gargoyle bodies, whose entries describe
+        // more than a straight group swap. Leaving them alone keeps their
+        // current behaviour rather than guessing at it.
+        if (replaces == 48 || replaces == 68)
+            continue;
+
+        for (uint i = 0; i < replaces; i++)
+        {
+            // Each record is 4 + 4 + 4 + 60 bytes; stop rather than read past the end.
+            if (Ptr + 72 > End)
+            {
+                rejected++;
+                break;
+            }
+
+            const uint oldIndex = ReadUInt32LE();
+            const uint frameCount = ReadUInt32LE();
+
+            if (frameCount != 0)
+            {
+                // A real frame count means the group is described rather than
+                // replaced, and that form is not handled here.
+                Move(64);
+                continue;
+            }
+
+            uint newIndex = ReadUInt32LE();
+            Move(60);
+
+            if (oldIndex >= ANIMATION_GROUPS_COUNT || newIndex >= ANIMATION_GROUPS_COUNT)
+            {
+                rejected++;
+                continue;
+            }
+
+            indexAnim.m_Groups[oldIndex] = indexAnim.m_Groups[newIndex];
+        }
+
+        processed++;
+    }
+
+    LOG("AnimationSequence: %d entries applied, %d rejected\n", processed, rejected);
+}
+//----------------------------------------------------------------------------------
 void CFileManager::ReadTask()
 {
+    const uint readTaskStart = SDL_GetTicks();
     std::unordered_map<uint64_t, UOPAnimationData> hashes;
     IFOR (i, 1, 5)
     {
@@ -557,6 +637,9 @@ void CFileManager::ReadTask()
     if (g_AnimationManager.AnimGroupCount < maxGroup)
         g_AnimationManager.AnimGroupCount = maxGroup;
 
+    ProcessAnimationSequenceData();
+
+    LOG("UOP animations read in %u ms\n", SDL_GetTicks() - readTaskStart);
     m_AutoResetEvent.Set();
 }
 //----------------------------------------------------------------------------------
