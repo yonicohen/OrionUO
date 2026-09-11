@@ -40,6 +40,17 @@ bool CGLFrameBuffer::Init(int width, int height)
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glGenTextures(1, &Texture.Texture);
         glBindTexture(GL_TEXTURE_2D, Texture.Texture);
+#if defined(ORION_GLES)
+        // Gump framebuffers are arbitrary sizes, so almost always non-power-of-two.
+        // GLES treats an NPOT texture as incomplete - it samples as solid black -
+        // unless it clamps and uses a non-mipmapped filter, and the defaults are
+        // neither. Desktop GL gets away with the defaults because Release()
+        // generates mipmaps afterwards.
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+#endif
         glTexImage2D(
             GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8, NULL);
 
@@ -97,7 +108,11 @@ void CGLFrameBuffer::Release()
         glBindFramebuffer(GL_FRAMEBUFFER, m_OldFrameBuffer);
 
         glBindTexture(GL_TEXTURE_2D, Texture.Texture);
+#if !defined(ORION_GLES)
+        // Not wanted under GLES: the texture uses a non-mipmapped filter there,
+        // precisely so that an NPOT framebuffer is a complete texture.
         glGenerateMipmap(GL_TEXTURE_2D);
+#endif
 
         g_GL.RestorePort();
     }
