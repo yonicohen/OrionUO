@@ -122,6 +122,17 @@ static void SceneNormals(bool useBatch)
 {
     glEnable(GL_LIGHTING);
     glEnable(GL_LIGHT0);
+
+    // Set the same light the client sets at start-up. Relying on GL's defaults
+    // made this a test of whatever the driver happened to default to, which is
+    // how it passed on hardware and failed on the software renderer.
+    GLfloat lightPosition[] = { -1.0f, -1.0f, 0.5f, 0.0f };
+    glLightfv(GL_LIGHT0, GL_POSITION, lightPosition);
+    GLfloat lightAmbient[] = { 2.0f, 2.0f, 2.0f, 1.0f };
+    glLightfv(GL_LIGHT0, GL_AMBIENT, lightAmbient);
+    GLfloat modelAmbient[] = { 0.8f, 0.8f, 0.8f, 0.8f };
+    glLightModelfv(GL_LIGHT_MODEL_AMBIENT, modelAmbient);
+    glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_FALSE);
     if (useBatch)
     {
         g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);

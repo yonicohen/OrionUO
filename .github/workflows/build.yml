@@ -80,7 +80,7 @@ jobs:
       # there is nothing to install. This job has never been run before it was
       # written, so treat a failure here as information rather than a surprise.
       - name: Configure
-        run: cmake -G "Visual Studio 17 2022" -A x64 -S . -B build
+        run: cmake -A x64 -S . -B build
 
       - name: Build
         run: cmake --build build --config Release --target OrionUO
