@@ -420,20 +420,18 @@ if(ORION_WINDOWS)
   # Windows builds against the import libraries committed under Dependencies/,
   # the same ones the original #pragma comment(lib) lines named before CMake
   # took over the build.
-  if(ORION_64BITS)
-    set(orion_deps_lib "${PROJECT_SOURCE_DIR}/Dependencies/lib/x64")
-  else()
-    set(orion_deps_lib "${PROJECT_SOURCE_DIR}/Dependencies/lib/Win32")
-  endif()
+  # DEP_LIB_DIR is set by the top level CMakeLists, next to the architecture it
+  # was chosen for, so the two cannot drift apart.
+  set(orion_deps_lib "${DEP_LIB_DIR}")
 
   target_link_libraries(OrionUO PUBLIC
-    "${orion_deps_lib}/SDL2.lib"
-    "${orion_deps_lib}/SDL2main.lib"
-    "${orion_deps_lib}/glew32.lib"
-    "${orion_deps_lib}/FreeImage.lib"
-    "${orion_deps_lib}/bass.lib"
-    "${orion_deps_lib}/bassmidi.lib"
-    "${orion_deps_lib}/zdll.lib"
+    "${orion_deps_lib}SDL2.lib"
+    "${orion_deps_lib}SDL2main.lib"
+    "${orion_deps_lib}glew32.lib"
+    "${orion_deps_lib}FreeImage.lib"
+    "${orion_deps_lib}bass.lib"
+    "${orion_deps_lib}bassmidi.lib"
+    ${ZLIB_LIBRARIES}
     opengl32
     glu32
     winmm
