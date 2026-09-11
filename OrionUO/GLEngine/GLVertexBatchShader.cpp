@@ -9,7 +9,39 @@
 //----------------------------------------------------------------------------------
 #include "stdafx.h"
 //----------------------------------------------------------------------------------
+// The instance exists on both paths; only what its methods do differs.
 CGLVertexBatchShader g_GLBatchShader;
+
+// GLES 1.x has no programmable pipeline, so there is nothing here to build.
+// CGLVertexBatch checks Available() and keeps using the fixed function arrays,
+// which is what the Android build wants: the whole point of targeting GLES 1.x
+// is that it still has them. A GLES 2.0 renderer would use this file instead,
+// and drop the fixed function path rather than falling back to it.
+#if defined(ORION_GLES)
+
+bool CGLVertexBatchShader::Init()
+{
+    return false;
+}
+
+void CGLVertexBatchShader::Free()
+{
+}
+
+void CGLVertexBatchShader::Draw(GLenum, const float *, int, int, bool, bool)
+{
+}
+
+GLuint CGLVertexBatchShader::CompileStage(GLenum, const char *)
+{
+    return 0;
+}
+
+void CGLVertexBatchShader::CacheLightingState()
+{
+}
+
+#else
 //----------------------------------------------------------------------------------
 // GLSL 1.20 is what an OpenGL 2.1 context guarantees, and it is also what GLES 2.0
 // accepts with only the precision qualifiers added, so the same source serves both
@@ -335,3 +367,5 @@ void CGLVertexBatchShader::Draw(
     glUseProgram(0);
 }
 //----------------------------------------------------------------------------------
+
+#endif // !ORION_GLES

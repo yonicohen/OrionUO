@@ -143,6 +143,7 @@ using namespace std;
 #include "GLEngine/GLShader.h"
 #include "GLEngine/GLVector.h"
 #include "GLEngine/GLFrameBuffer.h"
+#include "GLEngine/GLCompat.h"
 #include "GLEngine/GLMatrixStack.h"
 #include "GLEngine/GLArtUpscale.h"
 #include "GLEngine/GLVertexBatchShader.h"

@@ -122,6 +122,11 @@ bool CGLEngine::Install()
     }
 #endif
 
+#if defined(ORION_GLES)
+    // GLES needs no extension loader: the core entry points are exported
+    // directly by libGLESv1_CM, so there is no glewInit equivalent to call.
+    LOG("GLES v(%s)\n", glGetString(GL_VERSION));
+#else
     int glewInitResult = glewInit();
     LOG("glewInit() = %i fb=%i v(%s) (shader: %i)\n",
         glewInitResult,
@@ -130,12 +135,22 @@ bool CGLEngine::Install()
         GL_ARB_shader_objects);
     if (glewInitResult)
         return false;
+#endif
 
     LOG("Graphics Successfully Initialized\n");
     LOG("OpenGL Info:\n");
     LOG("    Version: %s\n", glGetString(GL_VERSION));
     LOG("     Vendor: %s\n", glGetString(GL_VENDOR));
     LOG("   Renderer: %s\n", glGetString(GL_RENDERER));
+#if defined(ORION_GLES)
+    // GLES 1.x has no shading language, and framebuffers are an extension, so
+    // ask the extension string rather than a loader's feature flags.
+    const char *extensions = (const char *)glGetString(GL_EXTENSIONS);
+    CanUseFrameBuffer =
+        (extensions != nullptr && strstr(extensions, "GL_OES_framebuffer_object") != nullptr);
+
+    CanUseBuffer = false;
+#else
     LOG("    Shading: %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
 
     CanUseFrameBuffer =
@@ -144,9 +159,13 @@ bool CGLEngine::Install()
 
     CanUseBuffer =
         (GL_VERSION_1_5 && glBindBuffer && glBufferData && glDeleteBuffers && glGenBuffers);
-
+#endif
     CanUseBuffer = false;
 
+#if !defined(ORION_GLES)
+// The GL2 path binds vertex buffer objects with GL_INT arrays, which GLES 1.x
+// does not accept as a vertex array type. It is dead code on every platform -
+// CanUseBuffer is hardcoded false above - so it is compiled out for Android.
     if (CanUseBuffer)
     {
         glGenBuffers(3, &PositionBuffer);
@@ -168,6 +187,7 @@ bool CGLEngine::Install()
         g_GL_DrawStretched_Ptr = &CGLEngine::GL2_DrawStretched;
         g_GL_DrawResizepic_Ptr = &CGLEngine::GL2_DrawResizepic;
     }
+#endif // !ORION_GLES
 
     LOG("g_UseFrameBuffer = %i; CanUseBuffer = %i\n", CanUseFrameBuffer, CanUseBuffer);
 
@@ -339,6 +359,18 @@ WISP_GEOMETRY::CPoint2Di CGLEngine::WindowToScene(int x, int y) const
 void CGLEngine::GL1_BindTexture16(CGLTexture &texture, int width, int height, pushort pixels)
 {
     WISPFUN_DEBUG("c29_f6");
+    // These take a raw pointer and are called from a dozen places, several of
+    // which build their pixels conditionally. A null here used to read address
+    // zero in the hit map loop below; on Android that is an immediate segfault.
+    if (pixels == nullptr || width <= 0 || height <= 0)
+    {
+        LOG("BindTexture16: refusing %dx%d with %s pixel data\n",
+            width,
+            height,
+            (pixels == nullptr) ? "no" : "some");
+        return;
+    }
+
     GLuint tex = 0;
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glGenTextures(1, &tex);
@@ -357,21 +389,49 @@ void CGLEngine::GL1_BindTexture16(CGLTexture &texture, int width, int height, pu
         GLArtUpscale::Double16(pixels, width, height, upscaled);
     const bool doubled = !upscaled.empty();
 
+    const ushort *source16 = doubled ? &upscaled[0] : pixels;
+    const int uploadWidth = doubled ? width * 2 : width;
+    const int uploadHeight = doubled ? height * 2 : height;
+
+#if defined(ORION_GLES)
+    // GLES 1.x has neither GL_BGRA nor the _REV packed types, and wants the
+    // internal format to equal the format. UO stores ARGB1555 - alpha in the top
+    // bit - which is what BGRA/1_5_5_5_REV reads; GLES offers RGBA5551, the same
+    // three five-bit fields shifted up one place with alpha moved to the bottom.
+    std::vector<ushort> converted((size_t)uploadWidth * uploadHeight);
+    for (size_t i = 0; i < converted.size(); i++)
+    {
+        const ushort argb = source16[i];
+        converted[i] = (ushort)(((argb & 0x7FFF) << 1) | (argb >> 15));
+    }
+
+    glTexImage2D(
+        GL_TEXTURE_2D,
+        0,
+        GL_RGBA,
+        uploadWidth,
+        uploadHeight,
+        0,
+        GL_RGBA,
+        GL_UNSIGNED_SHORT_5_5_5_1,
+        &converted[0]);
+#else
     glTexImage2D(
         GL_TEXTURE_2D,
         0,
         GL_RGB5_A1,
-        doubled ? width * 2 : width,
-        doubled ? height * 2 : height,
+        uploadWidth,
+        uploadHeight,
         0,
         GL_BGRA,
         GL_UNSIGNED_SHORT_1_5_5_5_REV,
-        doubled ? &upscaled[0] : pixels);
+        source16);
+#endif
 
     texture.Width = width;
     texture.Height = height;
-    texture.TexelWidth = doubled ? width * 2 : width;
-    texture.TexelHeight = doubled ? height * 2 : height;
+    texture.TexelWidth = uploadWidth;
+    texture.TexelHeight = uploadHeight;
     texture.Texture = tex;
 
     if (IgnoreHitMap)
@@ -394,6 +454,18 @@ void CGLEngine::GL1_BindTexture16(CGLTexture &texture, int width, int height, pu
 void CGLEngine::GL1_BindTexture32(CGLTexture &texture, int width, int height, puint pixels)
 {
     WISPFUN_DEBUG("c29_f7");
+    // These take a raw pointer and are called from a dozen places, several of
+    // which build their pixels conditionally. A null here used to read address
+    // zero in the hit map loop below; on Android that is an immediate segfault.
+    if (pixels == nullptr || width <= 0 || height <= 0)
+    {
+        LOG("BindTexture32: refusing %dx%d with %s pixel data\n",
+            width,
+            height,
+            (pixels == nullptr) ? "no" : "some");
+        return;
+    }
+
     GLuint tex = 0;
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glGenTextures(1, &tex);
@@ -408,21 +480,37 @@ void CGLEngine::GL1_BindTexture32(CGLTexture &texture, int width, int height, pu
         GLArtUpscale::Double32(pixels, width, height, upscaled);
     const bool doubled = !upscaled.empty();
 
+    const uint *source32 = doubled ? &upscaled[0] : pixels;
+    const int uploadWidth = doubled ? width * 2 : width;
+    const int uploadHeight = doubled ? height * 2 : height;
+
+#if defined(ORION_GLES)
+    // BGRA/UNSIGNED_INT_8_8_8_8 reads each word as B<<24|G<<16|R<<8|A. GLES only
+    // takes RGBA as four bytes in memory, so unpack explicitly rather than
+    // reordering the word, which would depend on host endianness.
+    std::vector<uchar> converted((size_t)uploadWidth * uploadHeight * 4);
+    for (size_t i = 0; i < (size_t)uploadWidth * uploadHeight; i++)
+    {
+        const uint value = source32[i];
+        converted[i * 4 + 0] = (uchar)((value >> 8) & 0xFF);  // R
+        converted[i * 4 + 1] = (uchar)((value >> 16) & 0xFF); // G
+        converted[i * 4 + 2] = (uchar)((value >> 24) & 0xFF); // B
+        converted[i * 4 + 3] = (uchar)(value & 0xFF);         // A
+    }
+
     glTexImage2D(
-        GL_TEXTURE_2D,
-        0,
-        GL_RGBA4,
-        doubled ? width * 2 : width,
-        doubled ? height * 2 : height,
-        0,
-        GL_BGRA,
-        GL_UNSIGNED_INT_8_8_8_8,
-        doubled ? &upscaled[0] : pixels);
+        GL_TEXTURE_2D, 0, GL_RGBA, uploadWidth, uploadHeight, 0, GL_RGBA,
+        GL_UNSIGNED_BYTE, &converted[0]);
+#else
+    glTexImage2D(
+        GL_TEXTURE_2D, 0, GL_RGBA4, uploadWidth, uploadHeight, 0, GL_BGRA,
+        GL_UNSIGNED_INT_8_8_8_8, source32);
+#endif
 
     texture.Width = width;
     texture.Height = height;
-    texture.TexelWidth = doubled ? width * 2 : width;
-    texture.TexelHeight = doubled ? height * 2 : height;
+    texture.TexelWidth = uploadWidth;
+    texture.TexelHeight = uploadHeight;
     texture.Texture = tex;
 
     if (IgnoreHitMap)
@@ -442,6 +530,10 @@ void CGLEngine::GL1_BindTexture32(CGLTexture &texture, int width, int height, pu
     }
 }
 //----------------------------------------------------------------------------------
+#if !defined(ORION_GLES)
+// The GL2 path binds vertex buffer objects with GL_INT arrays, which GLES 1.x
+// does not accept as a vertex array type. It is dead code on every platform -
+// CanUseBuffer is hardcoded false above - so it is compiled out for Android.
 void CGLEngine::GL2_CreateArrays(CGLTexture &texture, int width, int height)
 {
     WISPFUN_DEBUG("c29_f8");
@@ -476,6 +568,7 @@ void CGLEngine::GL2_BindTexture32(CGLTexture &texture, int width, int height, pu
     GL1_BindTexture32(texture, width, height, pixels);
     GL2_CreateArrays(texture, width, height);
 }
+#endif // !ORION_GLES
 //----------------------------------------------------------------------------------
 void CGLEngine::BeginDraw()
 {
@@ -1205,6 +1298,10 @@ void CGLEngine::GL1_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
 }
 
 //----------------------------------------------------------------------------------
+#if !defined(ORION_GLES)
+// The GL2 path binds vertex buffer objects with GL_INT arrays, which GLES 1.x
+// does not accept as a vertex array type. It is dead code on every platform -
+// CanUseBuffer is hardcoded false above - so it is compiled out for Android.
 void CGLEngine::GL2_DrawLandTexture(const CGLTexture &texture, int x, int y, CLandObject *land)
 {
     WISPFUN_DEBUG("c29_f37");
@@ -1613,3 +1710,4 @@ void CGLEngine::GL2_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
     }
 }
 //----------------------------------------------------------------------------------
+#endif // !ORION_GLES

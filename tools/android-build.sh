@@ -52,7 +52,9 @@ db = json.load(open(sys.argv[1]))
 print("\n".join(sorted({e["file"] for e in db if e["file"].endswith(".cpp")})))' "$db")"
 
 flags=(
-    -std=c++17 -O2 -fPIC
+    # -g costs only file size in the .so and makes a crash address on device
+    # resolve to a line instead of a guess.
+    -std=c++17 -O2 -g -fPIC
     -DORION_GLES -DORION_CMAKE -DORION_POSIX -DUSE_ORIONDLL=0 -DUSE_WISP=0
     -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS -DNDEBUG
     -I"$prefix/include" -I"$prefix/include/SDL2" -I"$repo/build"
