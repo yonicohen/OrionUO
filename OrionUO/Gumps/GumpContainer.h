@@ -32,6 +32,8 @@ public:
 
     static const uint ID_GC_LOCK_MOVING;
     static const uint ID_GC_MINIMIZE;
+    static const uint ID_GC_GRID_SCROLL_UP;
+    static const uint ID_GC_GRID_SCROLL_DOWN;
 
     CGUIGumppic *m_BodyGump{ NULL };
 
@@ -39,13 +41,30 @@ public:
     // that art is a picture of a specific bag with its own irregular interior.
     CGUIResizepic *m_GridBackground{ NULL };
 
+    // Created once and shown only when the contents overflow; adding them in
+    // UpdateContent would append a fresh pair on every rebuild.
+    CGUIButton *m_GridScrollUp{ NULL };
+    CGUIButton *m_GridScrollDown{ NULL };
+
     // A cell is one world tile plus a little breathing room, which is what the
-    // item artwork is drawn at.
+    // item artwork is drawn at. Four by four of those, plus the border, comes to
+    // 224 square - square rather than a long strip, and compact enough to leave
+    // the game window room.
     static const int GridCellSize = 50;
-    static const int GridColumns = 10;
+    static const int GridColumns = 4;
     static const int GridBorder = 12;
 
+    // Beyond this the panel would grow taller than most screens, so it scrolls
+    // instead.
+    static const int GridMaxRows = 4;
+
+    // First visible row.
+    int m_GridScrollRow{ 0 };
+
     bool UseGrid() const;
+
+    // Stack size shortened to fit a cell: 15.0k rather than 15000.
+    static string GridCountText(int count);
 
     void UpdateItemCoordinates(class CGameObject *item);
 

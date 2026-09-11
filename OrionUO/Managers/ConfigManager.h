@@ -15,6 +15,11 @@
 // for it and without a saved profile.
 extern bool g_ForceGridContainers;
 //----------------------------------------------------------------------------------
+// Backing art for a gridded container. The Character Status frame itself is fixed
+// size artwork and cannot be stretched to fit, so this is a resizepic in a similar
+// style. Overridable with --gridbg to compare candidates without a rebuild.
+extern ushort g_GridContainerBackground;
+//----------------------------------------------------------------------------------
 class CConfigManager
 {
 protected:

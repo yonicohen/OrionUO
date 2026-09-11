@@ -13,6 +13,8 @@
 //----------------------------------------------------------------------------------
 const uint CGumpContainer::ID_GC_LOCK_MOVING = 0xFFFFFFFE;
 const uint CGumpContainer::ID_GC_MINIMIZE = 0xFFFFFFFF;
+const uint CGumpContainer::ID_GC_GRID_SCROLL_UP = 0xFFFFFFFD;
+const uint CGumpContainer::ID_GC_GRID_SCROLL_DOWN = 0xFFFFFFFC;
 //----------------------------------------------------------------------------------
 CGumpContainer::CGumpContainer(uint serial, uint id, short x, short y)
     : CGump(GT_CONTAINER, serial, x, y)
@@ -50,8 +52,17 @@ CGumpContainer::CGumpContainer(uint serial, uint id, short x, short y)
     // Added before the item box so it draws behind the contents. Size is set in
     // UpdateContent once the item count is known.
     m_GridBackground =
-        (CGUIResizepic *)Add(new CGUIResizepic(0, 0x0BB8, 0, 0, GridCellSize, GridCellSize));
+        (CGUIResizepic *)Add(new CGUIResizepic(
+            0, g_GridContainerBackground, 0, 0, GridCellSize, GridCellSize));
     m_GridBackground->Visible = false;
+
+    m_GridScrollUp = (CGUIButton *)Add(
+        new CGUIButton(ID_GC_GRID_SCROLL_UP, 0x0824, 0x0824, 0x0824, 0, 0));
+    m_GridScrollUp->Visible = false;
+
+    m_GridScrollDown = (CGUIButton *)Add(
+        new CGUIButton(ID_GC_GRID_SCROLL_DOWN, 0x0825, 0x0825, 0x0825, 0, 0));
+    m_GridScrollDown->Visible = false;
 
     Add(new CGUIShader(&g_ColorizerShader, true));
 
@@ -62,6 +73,25 @@ CGumpContainer::CGumpContainer(uint serial, uint id, short x, short y)
 //----------------------------------------------------------------------------------
 CGumpContainer::~CGumpContainer()
 {
+}
+//----------------------------------------------------------------------------------
+string CGumpContainer::GridCountText(int count)
+{
+    // A cell is 50 pixels wide, so five figures of gold will not fit. Shorten the
+    // way the rest of the interface does: 15.0k rather than 15000.
+    if (count < 1000)
+        return std::to_string(count);
+
+    if (count < 1000000)
+    {
+        char buffer[32] = { 0 };
+        sprintf_s(buffer, "%.1fk", count / 1000.0f);
+        return string(buffer);
+    }
+
+    char buffer[32] = { 0 };
+    sprintf_s(buffer, "%.1fm", count / 1000000.0f);
+    return string(buffer);
 }
 //----------------------------------------------------------------------------------
 bool CGumpContainer::UseGrid() const
@@ -277,11 +307,70 @@ void CGumpContainer::UpdateContent()
         }
 
         const int rows = (itemCount + GridColumns - 1) / GridColumns;
+        const int visibleRows = (rows < GridMaxRows) ? rows : GridMaxRows;
+
+        // Clamp here rather than when scrolling: the contents can shrink under a
+        // scrolled view at any time, when something is moved out or used up.
+        const int maxScroll = (rows > visibleRows) ? (rows - visibleRows) : 0;
+        if (m_GridScrollRow > maxScroll)
+            m_GridScrollRow = maxScroll;
+        if (m_GridScrollRow < 0)
+            m_GridScrollRow = 0;
+
+        // A fixed square, not a panel that shrinks to whatever is in the bag: a
+        // container that changes shape every time an item is picked up is worse
+        // to use than one that keeps its place on screen.
         m_GridBackground->Width = GridColumns * GridCellSize + GridBorder * 2;
-        m_GridBackground->Height = (rows < 1 ? 1 : rows) * GridCellSize + GridBorder * 2;
+        m_GridBackground->Height = GridMaxRows * GridCellSize + GridBorder * 2;
+
+        // Without cell edges the panel reads as items scattered on a blank sheet
+        // rather than a grid. Lines rather than a box per cell: fourteen thin
+        // rectangles instead of thirty-six outlines.
+        const uint lineColor = 0x60000000;
+        const int gridWidth = GridColumns * GridCellSize;
+        const int gridHeight = GridMaxRows * GridCellSize;
+
+        for (int column = 0; column <= GridColumns; column++)
+        {
+            m_DataBox->Add(new CGUIColoredPolygone(
+                0,
+                0,
+                GridBorder + column * GridCellSize,
+                GridBorder,
+                1,
+                gridHeight,
+                lineColor));
+        }
+
+        for (int row = 0; row <= GridMaxRows; row++)
+        {
+            m_DataBox->Add(new CGUIColoredPolygone(
+                0,
+                0,
+                GridBorder,
+                GridBorder + row * GridCellSize,
+                gridWidth,
+                1,
+                lineColor));
+        }
+
+        const int buttonX = m_GridBackground->Width - 4;
+        m_GridScrollUp->Visible = (maxScroll > 0);
+        m_GridScrollDown->Visible = (maxScroll > 0);
+        m_GridScrollUp->SetX(buttonX);
+        m_GridScrollUp->SetY(GridBorder);
+        m_GridScrollDown->SetX(buttonX);
+        m_GridScrollDown->SetY(m_GridBackground->Height - GridBorder - 14);
     }
 
+    m_GridBackground->Graphic = g_GridContainerBackground;
     m_GridBackground->Visible = grid;
+
+    if (!grid)
+    {
+        m_GridScrollUp->Visible = false;
+        m_GridScrollDown->Visible = false;
+    }
 
     // The container artwork is a picture of one particular bag, with its own
     // irregular interior; a grid replaces it rather than sits inside it.
@@ -307,9 +396,26 @@ void CGumpContainer::UpdateContent()
 
             if (grid)
             {
+                const int row = gridIndex / GridColumns - m_GridScrollRow;
                 drawX = GridBorder + (gridIndex % GridColumns) * GridCellSize;
-                drawY = GridBorder + (gridIndex / GridColumns) * GridCellSize;
+                drawY = GridBorder + row * GridCellSize;
                 gridIndex++;
+
+                // Item art varies in size - a ring is tiny, a halberd is not - and
+                // the widget draws from its top left, so without this everything
+                // huddles against the top left corner of its cell instead of
+                // sitting in it.
+                CGLTexture *art = g_Orion.ExecuteStaticArt(graphic);
+                if (art != NULL)
+                {
+                    drawX += (GridCellSize - art->Width) / 2;
+                    drawY += (GridCellSize - art->Height) / 2;
+                }
+
+                // Outside the visible window: skip it rather than draw it beyond
+                // the panel, since nothing here clips to the panel's bounds.
+                if (row < 0 || row >= GridMaxRows)
+                    continue;
             }
 
             if (IsGameBoard)
@@ -334,6 +440,28 @@ void CGumpContainer::UpdateContent()
                     drawY,
                     doubleDraw));
                 item->PartialHue = IsPartialHue(g_Orion.GetStaticFlags(graphic));
+            }
+
+            // A stack's size is invisible in the classic layout - the artwork is
+            // the same whether it is one arrow or a thousand - and you had to
+            // hover each one to find out. A cell has room to just say so.
+            if (grid && obj->Count > 1)
+            {
+                // Positioned against the cell, not the art, which is centred and
+                // so starts at a different place for every item. Font 1 rather
+                // than 0: the large runic face overflowed into the next cell.
+                const int cellX = GridBorder + ((gridIndex - 1) % GridColumns) * GridCellSize;
+                const int cellY =
+                    GridBorder + ((gridIndex - 1) / GridColumns - m_GridScrollRow) * GridCellSize;
+
+                CGUIText *countText =
+                    (CGUIText *)m_DataBox->Add(new CGUIText(0x0481, cellX + 3, cellY + GridCellSize - 18));
+                // Font 0. Font 9 renders nothing here - this was already found once and
+                // then undone by a careless edit.
+                // Unicode rather than the ASCII faces: font 0 there is the large
+                // runic one that overflowed the cell, and 1 and 9 render nothing
+                // at all in this gump. The unicode face is small and legible.
+                countText->CreateTextureW(0, ToWString(GridCountText(obj->Count)));
             }
         }
     }
@@ -386,6 +514,21 @@ void CGumpContainer::GUMP_BUTTON_EVENT_C
     {
         LockMoving = !LockMoving;
         g_MouseManager.CancelDoubleClick = true;
+    }
+    else if (serial == ID_GC_GRID_SCROLL_UP)
+    {
+        if (m_GridScrollRow > 0)
+        {
+            m_GridScrollRow--;
+            WantUpdateContent = true;
+        }
+    }
+    else if (serial == ID_GC_GRID_SCROLL_DOWN)
+    {
+        // UpdateContent clamps against the real row count, so overshooting here
+        // is corrected before anything is drawn.
+        m_GridScrollRow++;
+        WantUpdateContent = true;
     }
 }
 //----------------------------------------------------------------------------------
