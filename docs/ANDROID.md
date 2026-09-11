@@ -2,8 +2,8 @@
 
 The client builds, installs and plays on Android: it reaches the game world on
 an emulator, connects to a shard and renders the map, mobiles and the whole
-interface. What it does not yet have is hue colorisation, a touch control scheme
-and a single run on real hardware. Details below.
+interface, and taps, drags and press-to-walk drive it. What it does not yet have
+is hue colorisation and a single run on real hardware. Details below.
 
 The macOS port is the prerequisite and is done: see the top-level README. This
 document covers only the Android-specific work.
@@ -126,10 +126,11 @@ Roughly in order:
    matters - several of the workarounds below exist only because the emulator's
    GLES 1.1 translator is incomplete, and they should be harmless there but have
    never been confirmed against a real driver.
-2. **Touch input.** The client assumes a mouse with two buttons and a keyboard.
-   Movement is right-button-hold, targeting is left-click, and there is no
-   on-screen keyboard handling beyond what SDL gives for text fields. This is a
-   design problem, not a porting one.
+2. **More of a touch control scheme.** The gestures below cover clicking,
+   dragging and walking, which is enough to play, but there is no pinch-zoom, no
+   two-finger gesture for a plain right click (context menus), and the on-screen
+   keyboard is whatever SDL raises for a text field - it covers the lower half of
+   the screen while it is up.
 3. **Hues, via a GLES 2.0 renderer.** The shader classes are stubs under GLES,
    so nothing is hue-colorised: every mobile, item and piece of clothing draws in
    its base palette. Replacing them means replacing the fixed function matrix
@@ -181,6 +182,35 @@ mobiles, paperdoll, status bar, minimap, journal and chat all draw. The emulator
 must be started with `-gpu host`; SwiftShader's GLES 1.x emulation was the
 original blocker and never got a frame out.
 
+## Touch input
+
+The client is written for a two-button mouse: the left button selects, drags and
+double-clicks, and walking is the right button held down in the direction to
+move. A touch screen has neither button, so `CWindow` translates gestures into
+the mouse events the rest of the client already understands - it synthesises
+them and runs them through its own `OnWindowProc`, so nothing above the window
+layer knows the difference:
+
+| gesture | becomes |
+| --- | --- |
+| tap | left click; a second tap inside the double-click window is a double click, which is how items are used |
+| drag | left button held, for moving gumps and items |
+| press and hold | right button held: walk towards the finger, steering by moving it, until it lifts |
+
+A press only becomes a hold once 350 ms have passed with the finger still within
+16 px of where it landed, which is what keeps a tap and the start of a drag
+distinguishable from the start of a walk. Because a finger resting on the screen
+generates no events, the hold is noticed from the frame loop rather than from an
+event.
+
+SDL's own touch-to-mouse synthesis is turned off (`SDL_HINT_TOUCH_MOUSE_EVENTS`):
+it only ever produces a left button, so it would deliver a left click at the
+start of every attempt to walk.
+
+Verified on the emulator by `adb shell input`: taps drive the login and shard
+screens, and a 2.5 s press in the world produces `Client:: Walk Request` and
+`Server:: Confirm Walk` pairs, with the view scrolling.
+
 ## Android-specific workarounds
 
 Things that are correct desktop GL but do not survive the trip, each found by
@@ -223,8 +253,9 @@ across a resize - are strictly better on the desktop too, and are not behind
 - Only ever run on an emulator; see the first item under "Left to do".
 - **No hues.** The shader classes are stubs, so everything draws in its base
   palette. This is very visible in the world.
-- Touch input is whatever SDL synthesises from taps: usable for the pre-game
-  screens, not yet a playable control scheme.
+- The touch scheme covers clicking, dragging and walking; it has no pinch-zoom,
+  no gesture for a plain right click, and the soft keyboard covers half the
+  screen while it is up.
 - Sound has not been heard, and screenshots are stubbed out (FreeImage is not
   cross-built).
 - The `0xFACE` handshake, login crypto and networking are platform-independent

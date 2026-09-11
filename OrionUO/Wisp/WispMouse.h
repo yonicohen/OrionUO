@@ -14,6 +14,11 @@ public:
     WISP_GEOMETRY::CPoint2Di RightDropPosition = WISP_GEOMETRY::CPoint2Di();
     WISP_GEOMETRY::CPoint2Di MidDropPosition = WISP_GEOMETRY::CPoint2Di();
 
+    // A touch screen has no pointer to read back, so the finger's position is
+    // fed in here and Update() uses it in place of SDL_GetMouseState.
+    bool UseTouchPosition = false;
+    WISP_GEOMETRY::CPoint2Di TouchPosition = WISP_GEOMETRY::CPoint2Di();
+
     bool LeftButtonPressed = false;
     bool RightButtonPressed = false;
     bool MidButtonPressed = false;

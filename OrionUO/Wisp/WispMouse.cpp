@@ -35,7 +35,10 @@ void CMouse::Update()
     Position.X = pos.x;
     Position.Y = pos.y;
 #else
-    SDL_GetMouseState(&Position.X, &Position.Y);
+    if (UseTouchPosition)
+        Position = TouchPosition;
+    else
+        SDL_GetMouseState(&Position.X, &Position.Y);
 #endif
 
     // The pre-game screens are drawn scaled and letterboxed into the window, so

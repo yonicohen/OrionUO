@@ -12,6 +12,14 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
     INITLOGGER(L"uolog.txt");
 
     //ParseCommandLine(); // FIXME
+#if defined(__ANDROID__)
+    // COrionWindow translates finger gestures itself - a press and hold has to
+    // become the right button, which SDL's own synthesis cannot express - so
+    // its left-button-only version of the same touches is turned off rather
+    // than arriving alongside.
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+#endif
+
     if (SDL_Init(SDL_INIT_TIMER) < 0)
     {
         SDL_LogError(

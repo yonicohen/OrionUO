@@ -19,6 +19,10 @@ void COrionApplication::OnMainLoop()
     //WISPFUN_DEBUG("c193_f1");
     g_Ticks = SDL_GetTicks();
 
+    // A finger resting on the screen produces no events, so the press-and-hold
+    // that stands in for the right button has to be noticed here.
+    g_OrionWindow.ProcessTouch();
+
     if (NextRenderTime <= g_Ticks)
     {
         NextUpdateTime = g_Ticks + 50;

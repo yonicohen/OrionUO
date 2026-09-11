@@ -745,6 +745,100 @@ LRESULT CWindow::OnWindowProc(HWND &hWnd, UINT &message, WPARAM &wParam, LPARAM 
     return DefWindowProc(hWnd, message, wParam, lParam);
 }
 #else
+//----------------------------------------------------------------------------------
+#if defined(__ANDROID__)
+namespace
+{
+// The client is written for a two-button mouse: the left button selects, drags
+// and double-clicks, and walking is the right button held down in the direction
+// to move. A touch screen has neither button, so gestures stand in:
+//
+//   tap                 left click - and a second tap inside the double-click
+//                       window is a double click, which is how items are used
+//   drag                left button held, for moving gumps and items
+//   press and hold      right button held: walk towards the finger, steering by
+//                       moving it, until the finger lifts
+//
+// A press only becomes a hold once TouchHoldDelay has passed with the finger
+// still roughly in place, which is what keeps a tap and a drag distinguishable
+// from the start of a walk.
+const uint TouchHoldDelay = 350; // ms before a press starts walking
+const int TouchSlop = 16;        // pixels of travel before a press is a drag
+
+struct
+{
+    SDL_FingerID Finger = 0;
+    bool Active = false;
+    bool LeftDown = false;
+    bool RightDown = false;
+    uint StartTicks = 0;
+    WISP_GEOMETRY::CPoint2Di Start;
+    WISP_GEOMETRY::CPoint2Di Current;
+} g_Touch;
+
+// Finger coordinates are fractions of the window; the client works in the same
+// units SDL_GetMouseState reports, so scale them by the window size.
+WISP_GEOMETRY::CPoint2Di TouchToWindow(float normalizedX, float normalizedY)
+{
+    int width = 0;
+    int height = 0;
+    if (g_WispWindow != nullptr)
+        SDL_GetWindowSize(g_WispWindow->m_window, &width, &height);
+
+    return WISP_GEOMETRY::CPoint2Di((int)(normalizedX * width), (int)(normalizedY * height));
+}
+} // namespace
+#endif
+//----------------------------------------------------------------------------------
+void CWindow::TouchMouseEvent(uint type, uchar button, const WISP_GEOMETRY::CPoint2Di &at)
+{
+#if defined(__ANDROID__)
+    WISP_MOUSE::g_WispMouse->UseTouchPosition = true;
+    WISP_MOUSE::g_WispMouse->TouchPosition = at;
+
+    // Handled here and now rather than pushed onto the queue: by the time a
+    // queued event came back the finger would have moved, and a press would be
+    // delivered at wherever it had got to.
+    SDL_Event synthetic;
+    SDL_memset(&synthetic, 0, sizeof(synthetic));
+    synthetic.type = type;
+
+    if (type == SDL_MOUSEMOTION)
+    {
+        synthetic.motion.x = at.X;
+        synthetic.motion.y = at.Y;
+    }
+    else
+    {
+        synthetic.button.button = button;
+        synthetic.button.state = (type == SDL_MOUSEBUTTONDOWN) ? SDL_PRESSED : SDL_RELEASED;
+        synthetic.button.clicks = 1;
+        synthetic.button.x = at.X;
+        synthetic.button.y = at.Y;
+    }
+
+    OnWindowProc(synthetic);
+#else
+    (void)type;
+    (void)button;
+    (void)at;
+#endif
+}
+//----------------------------------------------------------------------------------
+void CWindow::ProcessTouch()
+{
+#if defined(__ANDROID__)
+    if (!g_Touch.Active || g_Touch.LeftDown || g_Touch.RightDown)
+        return;
+
+    if (SDL_GetTicks() - g_Touch.StartTicks < TouchHoldDelay)
+        return;
+
+    g_Touch.RightDown = true;
+    TouchMouseEvent(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_RIGHT, g_Touch.Current);
+#endif
+}
+//----------------------------------------------------------------------------------
 bool CWindow::OnWindowProc(SDL_Event &ev)
 {
     switch (ev.type)
@@ -831,6 +925,81 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
             OnTextInput(ev.text);
         }
         break;
+
+#if defined(__ANDROID__)
+        case SDL_FINGERDOWN:
+        {
+            if (g_Touch.Active) // a second finger; the first one owns the gesture
+                break;
+
+            g_Touch.Finger = ev.tfinger.fingerId;
+            g_Touch.Active = true;
+            g_Touch.LeftDown = false;
+            g_Touch.RightDown = false;
+            g_Touch.StartTicks = SDL_GetTicks();
+            g_Touch.Start = TouchToWindow(ev.tfinger.x, ev.tfinger.y);
+            g_Touch.Current = g_Touch.Start;
+
+            // Nothing is sent yet: which button this is depends on what the
+            // finger does next. Move the cursor there so the client draws it
+            // under the finger in the meantime.
+            WISP_MOUSE::g_WispMouse->UseTouchPosition = true;
+            WISP_MOUSE::g_WispMouse->TouchPosition = g_Touch.Start;
+        }
+        break;
+
+        case SDL_FINGERMOTION:
+        {
+            if (!g_Touch.Active || ev.tfinger.fingerId != g_Touch.Finger)
+                break;
+
+            g_Touch.Current = TouchToWindow(ev.tfinger.x, ev.tfinger.y);
+
+            if (!g_Touch.LeftDown && !g_Touch.RightDown)
+            {
+                const int dx = g_Touch.Current.X - g_Touch.Start.X;
+                const int dy = g_Touch.Current.Y - g_Touch.Start.Y;
+                if (dx * dx + dy * dy < TouchSlop * TouchSlop)
+                    break;
+
+                // Moved before the hold delay: this is a drag, so press the
+                // left button where the finger started rather than where it is
+                // now - a gump picked up by its edge has to stay under the
+                // finger.
+                g_Touch.LeftDown = true;
+                TouchMouseEvent(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT, g_Touch.Start);
+            }
+
+            TouchMouseEvent(SDL_MOUSEMOTION, 0, g_Touch.Current);
+        }
+        break;
+
+        case SDL_FINGERUP:
+        {
+            if (!g_Touch.Active || ev.tfinger.fingerId != g_Touch.Finger)
+                break;
+
+            const WISP_GEOMETRY::CPoint2Di at = g_Touch.Current;
+
+            if (g_Touch.RightDown)
+                TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, at);
+            else if (g_Touch.LeftDown)
+                TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, at);
+            else
+            {
+                // Lifted before either the hold delay or the drag threshold: a
+                // tap, which is a left click. The press and release go through
+                // together so the double-click timer sees a complete click.
+                TouchMouseEvent(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT, at);
+                TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, at);
+            }
+
+            g_Touch.Active = false;
+            g_Touch.LeftDown = false;
+            g_Touch.RightDown = false;
+        }
+        break;
+#endif
 
         case SDL_MOUSEMOTION:
         {

@@ -69,6 +69,17 @@ public:
     LRESULT OnWindowProc(HWND &hWnd, UINT &message, WPARAM &wParam, LPARAM &lParam);
 #else
     bool OnWindowProc(SDL_Event &ev);
+
+    // Finger gestures become the mouse events the client is written for; a
+    // press only turns into a held right button after a delay, so this has to
+    // be given a chance to run on frames where no event arrives. No-op away
+    // from Android.
+    void ProcessTouch();
+
+private:
+    void TouchMouseEvent(uint type, uchar button, const WISP_GEOMETRY::CPoint2Di &at);
+
+public:
 #endif
 
 #if USE_WISP
