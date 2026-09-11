@@ -212,7 +212,7 @@ void CGumpSecureTrading::Draw()
 
     CGump::Draw();
 
-    glTranslatef(g_GumpTranslate.X, g_GumpTranslate.Y, 0.0f);
+    g_GLMatrix.Translate(g_GumpTranslate.X, g_GumpTranslate.Y, 0.0f);
 
     g_FontColorizerShader.Use();
 
@@ -220,7 +220,7 @@ void CGumpSecureTrading::Draw()
 
     UnuseShader();
 
-    glTranslatef(-g_GumpTranslate.X, -g_GumpTranslate.Y, 0.0f);
+    g_GLMatrix.Translate(-g_GumpTranslate.X, -g_GumpTranslate.Y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 CRenderObject *CGumpSecureTrading::Select()

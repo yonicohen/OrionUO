@@ -215,7 +215,7 @@ void CGUIShopItem::Draw(bool checktrans)
     WISPFUN_DEBUG("c73_f8");
     CGLTexture *th = NULL;
 
-    glTranslatef((GLfloat)m_X, (GLfloat)m_Y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)m_X, (GLfloat)m_Y, 0.0f);
 
     glUniform1iARB(g_ShaderDrawMode, SDM_NO_COLOR);
 
@@ -304,7 +304,7 @@ void CGUIShopItem::Draw(bool checktrans)
     if (th != NULL)
         th->Draw(166, m_MaxOffset, checktrans);
 
-    glTranslatef((GLfloat)-m_X, (GLfloat)-m_Y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-m_X, (GLfloat)-m_Y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 bool CGUIShopItem::Select()

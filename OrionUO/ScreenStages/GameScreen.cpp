@@ -1383,12 +1383,12 @@ void CGameScreen::DrawGameWindowLight()
             GLfloat translateOffsetX = (GLfloat)offsetX;
             GLfloat translateOffsetY = (GLfloat)offsetY;
 
-            glTranslatef(translateOffsetX, translateOffsetY, 0.0f);
+            g_GLMatrix.Translate(translateOffsetX, translateOffsetY, 0.0f);
 
             IFOR (i, 0, m_LightCount)
                 g_Orion.DrawLight(m_Light[i]);
 
-            glTranslatef(-translateOffsetX, -translateOffsetY, 0.0f);
+            g_GLMatrix.Translate(-translateOffsetX, -translateOffsetY, 0.0f);
 
             UnuseShader();
 

@@ -192,7 +192,25 @@ bool CGLEngine::Install()
     if (wglSwapIntervalEXT != NULL)
         wglSwapIntervalEXT(0);
 #else
-    SDL_GL_SetSwapInterval(0); // 1 vsync
+    // Frames are paced by the client's own timer, so vsync is a second limiter on
+    // top of it rather than the only one. What it buys is the absence of tearing:
+    // without it a swap lands mid-scanout whenever the frame timer and the display
+    // refresh disagree, which they usually do.
+    //
+    // Late swap tearing first - it syncs when it can and skips the wait when a
+    // frame runs long, rather than dropping to half rate - and plain vsync if the
+    // driver has no such thing.
+    if (g_UseVSync)
+    {
+        if (SDL_GL_SetSwapInterval(-1) < 0)
+            SDL_GL_SetSwapInterval(1);
+    }
+    else
+        SDL_GL_SetSwapInterval(0);
+
+    LOG("VSync: %s (swap interval %d)\n",
+        g_UseVSync ? "on" : "off",
+        SDL_GL_GetSwapInterval());
 #endif
 
     glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
@@ -568,10 +586,7 @@ void CGLEngine::ViewPort(int x, int y, int width, int height)
         (int)((g_OrionWindow.GetSize().Height - y - height) * pixelRatio),
         (int)(width * pixelRatio),
         (int)(height * pixelRatio));
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(x, width + x, height + y, y, -150.0, 150.0);
-    glMatrixMode(GL_MODELVIEW);
+    g_GLMatrix.Ortho((float)x, (float)(width + x), (float)(height + y), (float)y, -150.0f, 150.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::ApplySceneProjection()
@@ -588,10 +603,7 @@ void CGLEngine::ApplySceneProjection()
             (int)(SceneOffsetY * pixelRatio),
             (int)(SceneWidth * SceneScale * pixelRatio),
             (int)(SceneHeight * SceneScale * pixelRatio));
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        glOrtho(0.0, (GLdouble)SceneWidth, (GLdouble)SceneHeight, 0.0, -150.0, 150.0);
-        glMatrixMode(GL_MODELVIEW);
+        g_GLMatrix.Ortho(0.0f, (float)SceneWidth, (float)SceneHeight, 0.0f, -150.0f, 150.0f);
         return;
     }
 
@@ -601,10 +613,13 @@ void CGLEngine::ApplySceneProjection()
         0,
         (int)(g_OrionWindow.GetSize().Width * windowPixelRatio),
         (int)(g_OrionWindow.GetSize().Height * windowPixelRatio));
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0.0, g_OrionWindow.GetSize().Width, g_OrionWindow.GetSize().Height, 0.0, -150.0, 150.0);
-    glMatrixMode(GL_MODELVIEW);
+    g_GLMatrix.Ortho(
+        0.0f,
+        (float)g_OrionWindow.GetSize().Width,
+        (float)g_OrionWindow.GetSize().Height,
+        0.0f,
+        -150.0f,
+        150.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::RestorePort()
@@ -707,7 +722,7 @@ void CGLEngine::DrawPolygone(int x, int y, int width, int height)
     WISPFUN_DEBUG("c29_f27");
     glDisable(GL_TEXTURE_2D);
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     g_GLBatch.Begin(GL_TRIANGLE_STRIP, false);
     g_GLBatch.Vertex(0, height);
@@ -716,7 +731,7 @@ void CGLEngine::DrawPolygone(int x, int y, int width, int height)
     g_GLBatch.Vertex(width, 0);
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 
     glEnable(GL_TEXTURE_2D);
 }
@@ -726,7 +741,7 @@ void CGLEngine::DrawCircle(float x, float y, float radius, int gradientMode)
     WISPFUN_DEBUG("c29_f28");
     glDisable(GL_TEXTURE_2D);
 
-    glTranslatef(x, y, 0.0f);
+    g_GLMatrix.Translate(x, y, 0.0f);
 
     g_GLBatch.Begin(GL_TRIANGLE_FAN, false);
 
@@ -745,7 +760,7 @@ void CGLEngine::DrawCircle(float x, float y, float radius, int gradientMode)
 
     g_GLBatch.End();
 
-    glTranslatef(-x, -y, 0.0f);
+    g_GLMatrix.Translate(-x, -y, 0.0f);
 
     glEnable(GL_TEXTURE_2D);
 }
@@ -761,7 +776,7 @@ void CGLEngine::GL1_DrawLandTexture(const CGLTexture &texture, int x, int y, CLa
     const RECT &rc = land->m_Rect;
     CVector *normals = land->m_Normals;
 
-    glTranslatef(translateX, translateY, 0.0f);
+    g_GLMatrix.Translate(translateX, translateY, 0.0f);
 
     g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
     g_GLBatch.Normal((GLfloat)normals[0].X, (GLfloat)normals[0].Y, (GLfloat)normals[0].Z);
@@ -781,7 +796,7 @@ void CGLEngine::GL1_DrawLandTexture(const CGLTexture &texture, int x, int y, CLa
     g_GLBatch.Vertex(22, 44 - rc.right); //v
     g_GLBatch.End();
 
-    glTranslatef(-translateX, -translateY, 0.0f);
+    g_GLMatrix.Translate(-translateX, -translateY, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_Draw(const CGLTexture &texture, int x, int y)
@@ -792,7 +807,7 @@ void CGLEngine::GL1_Draw(const CGLTexture &texture, int x, int y)
     int width = texture.Width;
     int height = texture.Height;
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
     g_GLBatch.TexCoord(0, 1);
@@ -805,7 +820,7 @@ void CGLEngine::GL1_Draw(const CGLTexture &texture, int x, int y)
     g_GLBatch.Vertex(width, 0);
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_DrawRotated(const CGLTexture &texture, int x, int y, float angle)
@@ -818,9 +833,9 @@ void CGLEngine::GL1_DrawRotated(const CGLTexture &texture, int x, int y, float a
 
     GLfloat translateY = (GLfloat)(y - height);
 
-    glTranslatef((GLfloat)x, translateY, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, translateY, 0.0f);
 
-    glRotatef(angle, 0.0f, 0.0f, 1.0f);
+    g_GLMatrix.Rotate(angle, 0.0f, 0.0f, 1.0f);
 
     g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
     g_GLBatch.TexCoord(0, 1);
@@ -833,8 +848,8 @@ void CGLEngine::GL1_DrawRotated(const CGLTexture &texture, int x, int y, float a
     g_GLBatch.Vertex(width, 0);
     g_GLBatch.End();
 
-    glRotatef(angle, 0.0f, 0.0f, -1.0f);
-    glTranslatef((GLfloat)-x, -translateY, 0.0f);
+    g_GLMatrix.Rotate(angle, 0.0f, 0.0f, -1.0f);
+    g_GLMatrix.Translate((GLfloat)-x, -translateY, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_DrawMirrored(const CGLTexture &texture, int x, int y, bool mirror)
@@ -845,7 +860,7 @@ void CGLEngine::GL1_DrawMirrored(const CGLTexture &texture, int x, int y, bool m
     int width = texture.Width;
     int height = texture.Height;
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
 
@@ -874,7 +889,7 @@ void CGLEngine::GL1_DrawMirrored(const CGLTexture &texture, int x, int y, bool m
 
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_DrawSitting(
@@ -883,7 +898,7 @@ void CGLEngine::GL1_DrawSitting(
     WISPFUN_DEBUG("c29_f33");
     BindTexture(texture);
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     float width = (float)texture.Width;
     float height = (float)texture.Height;
@@ -990,7 +1005,7 @@ void CGLEngine::GL1_DrawSitting(
 
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_DrawShadow(const CGLTexture &texture, int x, int y, bool mirror)
@@ -1003,7 +1018,7 @@ void CGLEngine::GL1_DrawShadow(const CGLTexture &texture, int x, int y, bool mir
 
     GLfloat translateY = (GLfloat)(y + height * 0.75);
 
-    glTranslatef((GLfloat)x, translateY, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, translateY, 0.0f);
 
     g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
 
@@ -1034,7 +1049,7 @@ void CGLEngine::GL1_DrawShadow(const CGLTexture &texture, int x, int y, bool mir
 
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, -translateY, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, -translateY, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_DrawStretched(
@@ -1046,7 +1061,7 @@ void CGLEngine::GL1_DrawStretched(
     int width = texture.Width;
     int height = texture.Height;
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     float drawCountX = drawWidth / (float)width;
     float drawCountY = drawHeight / (float)height;
@@ -1062,7 +1077,7 @@ void CGLEngine::GL1_DrawStretched(
     g_GLBatch.Vertex(drawWidth, 0);
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL1_DrawResizepic(CGLTexture **th, int x, int y, int width, int height)
@@ -1171,7 +1186,7 @@ void CGLEngine::GL1_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
         if (drawWidth < 1 || drawHeight < 1)
             continue;
 
-        glTranslatef((GLfloat)drawX, (GLfloat)drawY, 0.0f);
+        g_GLMatrix.Translate((GLfloat)drawX, (GLfloat)drawY, 0.0f);
 
         g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
         g_GLBatch.TexCoord(0.0f, drawCountY);
@@ -1184,7 +1199,7 @@ void CGLEngine::GL1_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
         g_GLBatch.Vertex(drawWidth, 0);
         g_GLBatch.End();
 
-        glTranslatef((GLfloat)-drawX, (GLfloat)-drawY, 0.0f);
+        g_GLMatrix.Translate((GLfloat)-drawX, (GLfloat)-drawY, 0.0f);
     }
 }
 
@@ -1197,7 +1212,7 @@ void CGLEngine::GL2_DrawLandTexture(const CGLTexture &texture, int x, int y, CLa
     float translateX = x - 22.0f;
     float translateY = y - 22.0f;
 
-    glTranslatef(translateX, translateY, 0.0f);
+    g_GLMatrix.Translate(translateX, translateY, 0.0f);
 
     glBindBuffer(GL_ARRAY_BUFFER, land->VertexBuffer);
     glVertexPointer(2, GL_INT, 0, (PVOID)0);
@@ -1214,7 +1229,7 @@ void CGLEngine::GL2_DrawLandTexture(const CGLTexture &texture, int x, int y, CLa
 
     glDisableClientState(GL_NORMAL_ARRAY);
 
-    glTranslatef(-translateX, -translateY, 0.0f);
+    g_GLMatrix.Translate(-translateX, -translateY, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL2_Draw(const CGLTexture &texture, int x, int y)
@@ -1225,7 +1240,7 @@ void CGLEngine::GL2_Draw(const CGLTexture &texture, int x, int y)
     int width = texture.Width;
     int height = texture.Height;
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     glBindBuffer(GL_ARRAY_BUFFER, texture.VertexBuffer);
     glVertexPointer(2, GL_INT, 0, (PVOID)0);
@@ -1235,7 +1250,7 @@ void CGLEngine::GL2_Draw(const CGLTexture &texture, int x, int y)
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL2_DrawRotated(const CGLTexture &texture, int x, int y, float angle)
@@ -1248,9 +1263,9 @@ void CGLEngine::GL2_DrawRotated(const CGLTexture &texture, int x, int y, float a
 
     GLfloat translateY = (GLfloat)(y - height);
 
-    glTranslatef((GLfloat)x, translateY, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, translateY, 0.0f);
 
-    glRotatef(angle, 0.0f, 0.0f, 1.0f);
+    g_GLMatrix.Rotate(angle, 0.0f, 0.0f, 1.0f);
 
     glBindBuffer(GL_ARRAY_BUFFER, texture.VertexBuffer);
     glVertexPointer(2, GL_INT, 0, (PVOID)0);
@@ -1260,8 +1275,8 @@ void CGLEngine::GL2_DrawRotated(const CGLTexture &texture, int x, int y, float a
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-    glRotatef(angle, 0.0f, 0.0f, -1.0f);
-    glTranslatef((GLfloat)-x, -translateY, 0.0f);
+    g_GLMatrix.Rotate(angle, 0.0f, 0.0f, -1.0f);
+    g_GLMatrix.Translate((GLfloat)-x, -translateY, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL2_DrawMirrored(const CGLTexture &texture, int x, int y, bool mirror)
@@ -1272,7 +1287,7 @@ void CGLEngine::GL2_DrawMirrored(const CGLTexture &texture, int x, int y, bool m
     int width = texture.Width;
     int height = texture.Height;
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     if (mirror)
         glBindBuffer(GL_ARRAY_BUFFER, texture.MirroredVertexBuffer);
@@ -1286,7 +1301,7 @@ void CGLEngine::GL2_DrawMirrored(const CGLTexture &texture, int x, int y, bool m
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL2_DrawSitting(
@@ -1295,7 +1310,7 @@ void CGLEngine::GL2_DrawSitting(
     WISPFUN_DEBUG("c29_f41");
     BindTexture(texture);
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     float width = (float)texture.Width;
     float height = (float)texture.Height;
@@ -1402,7 +1417,7 @@ void CGLEngine::GL2_DrawSitting(
 
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL2_DrawShadow(const CGLTexture &texture, int x, int y, bool mirror)
@@ -1415,7 +1430,7 @@ void CGLEngine::GL2_DrawShadow(const CGLTexture &texture, int x, int y, bool mir
 
     GLfloat translateY = (GLfloat)(y + height * 0.75);
 
-    glTranslatef((GLfloat)x, translateY, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, translateY, 0.0f);
 
     float ratio = height / width;
     float verticles[8];
@@ -1451,7 +1466,7 @@ void CGLEngine::GL2_DrawShadow(const CGLTexture &texture, int x, int y, bool mir
 
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
-    glTranslatef((GLfloat)-x, -translateY, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, -translateY, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL2_DrawStretched(
@@ -1463,7 +1478,7 @@ void CGLEngine::GL2_DrawStretched(
     int width = texture.Width;
     int height = texture.Height;
 
-    glTranslatef((GLfloat)x, (GLfloat)y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
     float drawCountX = drawWidth / (float)width;
     float drawCountY = drawHeight / (float)height;
@@ -1479,7 +1494,7 @@ void CGLEngine::GL2_DrawStretched(
     g_GLBatch.Vertex(drawWidth, 0);
     g_GLBatch.End();
 
-    glTranslatef((GLfloat)-x, (GLfloat)-y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::GL2_DrawResizepic(CGLTexture **th, int x, int y, int width, int height)
@@ -1580,7 +1595,7 @@ void CGLEngine::GL2_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
         if (drawWidth < 1 || drawHeight < 1)
             continue;
 
-        glTranslatef((GLfloat)drawX, (GLfloat)drawY, 0.0f);
+        g_GLMatrix.Translate((GLfloat)drawX, (GLfloat)drawY, 0.0f);
 
         g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
         g_GLBatch.TexCoord(0.0f, drawCountY);
@@ -1593,7 +1608,7 @@ void CGLEngine::GL2_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
         g_GLBatch.Vertex(drawWidth, 0);
         g_GLBatch.End();
 
-        glTranslatef((GLfloat)-drawX, (GLfloat)-drawY, 0.0f);
+        g_GLMatrix.Translate((GLfloat)-drawX, (GLfloat)-drawY, 0.0f);
     }
 }
 //----------------------------------------------------------------------------------

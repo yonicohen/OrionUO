@@ -49,5 +49,8 @@ extern bool g_UpscaleArt;
 // tone instead of keeping it crisp. Which reads better depends on the artwork.
 extern bool g_SharpFilter;
 //----------------------------------------------------------------------------------
+// Synchronise buffer swaps with the display. Off reproduces the old behaviour.
+extern bool g_UseVSync;
+//----------------------------------------------------------------------------------
 #endif
 //----------------------------------------------------------------------------------

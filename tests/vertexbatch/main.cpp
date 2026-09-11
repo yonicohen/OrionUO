@@ -16,6 +16,7 @@
 #include <cstring>
 #include <vector>
 
+#include "GLMatrixStack.h"
 #include "GLVertexBatchShader.h"
 #include "GLVertexBatch.h"
 
@@ -79,7 +80,7 @@ static void SceneCircleGradient(bool useBatch)
 {
     glDisable(GL_TEXTURE_2D);
     glColor4f(1.0f, 0.25f, 0.5f, 1.0f);
-    glTranslatef(128.0f, 128.0f, 0.0f);
+    g_GLMatrix.Translate(128.0f, 128.0f, 0.0f);
 
     const float radius = 100.0f;
     const float pi = (float)M_PI * 2.0f;
@@ -109,7 +110,7 @@ static void SceneCircleGradient(bool useBatch)
         glEnd();
     }
 
-    glTranslatef(-128.0f, -128.0f, 0.0f);
+    g_GLMatrix.Translate(-128.0f, -128.0f, 0.0f);
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
     glEnable(GL_TEXTURE_2D);
 }
@@ -203,11 +204,9 @@ static void Render(SceneFn fn, bool useBatch, std::vector<unsigned char> &out)
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0, WIDTH, HEIGHT, 0, -150, 150);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
+    // Drive both: GL for the immediate-mode reference, the stack for the shader.
+    g_GLMatrix.Ortho(0.0f, (float)WIDTH, (float)HEIGHT, 0.0f, -150.0f, 150.0f);
+    g_GLMatrix.LoadIdentity();
 
     glEnable(GL_TEXTURE_2D);
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);

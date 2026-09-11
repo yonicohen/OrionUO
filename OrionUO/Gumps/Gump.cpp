@@ -363,7 +363,7 @@ void CGump::DrawItems(CBaseGUI *start, int currentPage, int draw2Page)
                     GLfloat x = (GLfloat)htmlGump->GetX();
                     GLfloat y = (GLfloat)htmlGump->GetY();
 
-                    glTranslatef(x, y, 0.0f);
+                    g_GLMatrix.Translate(x, y, 0.0f);
 
                     CBaseGUI *item = (CBaseGUI *)htmlGump->m_Items;
 
@@ -378,12 +378,12 @@ void CGump::DrawItems(CBaseGUI *start, int currentPage, int draw2Page)
                     GLfloat offsetX = (GLfloat)(htmlGump->DataOffset.X - htmlGump->CurrentOffset.X);
                     GLfloat offsetY = (GLfloat)(htmlGump->DataOffset.Y - htmlGump->CurrentOffset.Y);
 
-                    glTranslatef(offsetX, offsetY, 0.0f);
+                    g_GLMatrix.Translate(offsetX, offsetY, 0.0f);
 
                     CGump::DrawItems(item, currentPage, draw2Page);
                     g_GL.PopScissor();
 
-                    glTranslatef(-(x + offsetX), -(y + offsetY), 0.0f);
+                    g_GLMatrix.Translate(-(x + offsetX), -(y + offsetY), 0.0f);
 
                     break;
                 }
@@ -1375,7 +1375,7 @@ void CGump::Draw()
                 glClear(GL_COLOR_BUFFER_BIT);
                 glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-                glTranslatef(-(GLfloat)GumpRect.Position.X, -(GLfloat)GumpRect.Position.Y, 0.0f);
+                g_GLMatrix.Translate(-(GLfloat)GumpRect.Position.X, -(GLfloat)GumpRect.Position.Y, 0.0f);
 
                 GenerateFrame(true);
 
@@ -1410,7 +1410,7 @@ void CGump::Draw()
                     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
                 }
 
-                glTranslatef((GLfloat)GumpRect.Position.X, (GLfloat)GumpRect.Position.Y, 0.0f);
+                g_GLMatrix.Translate((GLfloat)GumpRect.Position.X, (GLfloat)GumpRect.Position.Y, 0.0f);
 
                 m_FrameBuffer.Release();
             }
@@ -1433,7 +1433,7 @@ void CGump::Draw()
         posY += (GLfloat)GumpRect.Position.Y;
     }
 
-    glTranslatef(posX, posY, 0.0f);
+    g_GLMatrix.Translate(posX, posY, 0.0f);
 
     if (!g_ConfigManager.GetUseGLListsForInterface())
     {
@@ -1456,7 +1456,7 @@ void CGump::Draw()
 
     DrawLocker();
 
-    glTranslatef(-posX, -posY, 0.0f);
+    g_GLMatrix.Translate(-posX, -posY, 0.0f);
 }
 //----------------------------------------------------------------------------------
 CRenderObject *CGump::Select()

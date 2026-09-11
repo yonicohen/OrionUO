@@ -123,7 +123,7 @@ CBaseGUI *CGUISkillItem::SelectedItem()
 void CGUISkillItem::Draw(bool checktrans)
 {
     WISPFUN_DEBUG("c76_f8");
-    glTranslatef((GLfloat)m_X, (GLfloat)m_Y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)m_X, (GLfloat)m_Y, 0.0f);
 
     if (m_ButtonUse != NULL)
         m_ButtonUse->Draw(checktrans);
@@ -137,7 +137,7 @@ void CGUISkillItem::Draw(bool checktrans)
 
     m_ValueText.Draw(250 - m_ValueText.Width, 0);
 
-    glTranslatef((GLfloat)-m_X, (GLfloat)-m_Y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-m_X, (GLfloat)-m_Y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 bool CGUISkillItem::Select()

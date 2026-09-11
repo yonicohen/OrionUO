@@ -11,6 +11,7 @@
 //----------------------------------------------------------------------------------
 bool g_UpscaleArt = true;
 bool g_SharpFilter = true;
+bool g_UseVSync = true;
 //----------------------------------------------------------------------------------
 namespace GLArtUpscale
 {
@@ -23,6 +24,46 @@ bool Wanted(int width, int height)
 // itself; a corner is replaced only when the two neighbours meeting at it agree
 // with each other and disagree across the pixel. That condition is what rounds a
 // diagonal step without touching a straight edge or a lone pixel.
+// UO's artwork is dithered: two similar colours alternate pixel by pixel to fake
+// shades the 16 bit palette does not have. Compared exactly those pixels are
+// never equal, so EPX preserves every checkerboard and doubling the image makes
+// the dither twice as obvious - which is what left the ornate frames looking
+// mottled. Treating near-identical colours as equal lets those regions round and
+// blend, while real edges, where the colours are genuinely far apart, still hold.
+static bool SimilarColors(ushort a, ushort b)
+{
+    if (a == b)
+        return true;
+
+    // Transparent is its own thing; never merge it with a visible colour.
+    if ((a == 0) != (b == 0))
+        return false;
+
+    const int redDelta = (int)((a >> 10) & 0x1F) - (int)((b >> 10) & 0x1F);
+    const int greenDelta = (int)((a >> 5) & 0x1F) - (int)((b >> 5) & 0x1F);
+    const int blueDelta = (int)(a & 0x1F) - (int)(b & 0x1F);
+
+    // Three steps out of the 32 each channel has. Dither partners sit within
+    // one or two; anything an artist drew as an edge is far wider apart.
+    return (abs(redDelta) <= 3) && (abs(greenDelta) <= 3) && (abs(blueDelta) <= 3);
+}
+//----------------------------------------------------------------------------------
+static bool SimilarColors(uint a, uint b)
+{
+    if (a == b)
+        return true;
+
+    if (((a >> 24) == 0) != ((b >> 24) == 0))
+        return false;
+
+    const int redDelta = (int)((a >> 16) & 0xFF) - (int)((b >> 16) & 0xFF);
+    const int greenDelta = (int)((a >> 8) & 0xFF) - (int)((b >> 8) & 0xFF);
+    const int blueDelta = (int)(a & 0xFF) - (int)(b & 0xFF);
+
+    // The same three-in-thirty-two tolerance, scaled to eight bit channels.
+    return (abs(redDelta) <= 24) && (abs(greenDelta) <= 24) && (abs(blueDelta) <= 24);
+}
+//----------------------------------------------------------------------------------
 template <typename T>
 static void Double(const T *pixels, int width, int height, std::vector<T> &out)
 {
@@ -56,16 +97,20 @@ static void Double(const T *pixels, int width, int height, std::vector<T> &out)
             T bottomLeft = center;
             T bottomRight = center;
 
-            if (left == up && left != down && up != right)
+            if (SimilarColors(left, up) && !SimilarColors(left, down) &&
+                !SimilarColors(up, right))
                 topLeft = up;
 
-            if (up == right && up != left && right != down)
+            if (SimilarColors(up, right) && !SimilarColors(up, left) &&
+                !SimilarColors(right, down))
                 topRight = right;
 
-            if (down == left && down != right && left != up)
+            if (SimilarColors(down, left) && !SimilarColors(down, right) &&
+                !SimilarColors(left, up))
                 bottomLeft = left;
 
-            if (right == down && right != up && down != left)
+            if (SimilarColors(right, down) && !SimilarColors(right, up) &&
+                !SimilarColors(down, left))
                 bottomRight = down;
 
             const size_t base = (size_t)(y * 2) * outWidth + (size_t)(x * 2);

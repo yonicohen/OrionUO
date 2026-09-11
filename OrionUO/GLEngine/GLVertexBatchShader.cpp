@@ -244,27 +244,11 @@ void CGLVertexBatchShader::Draw(
     if (!m_Available || vertexCount == 0)
         return;
 
-    // Until the matrix stack is replaced, the transform is still the fixed
-    // function one; read it back and hand it to the shader. This is what lets the
-    // shader path be compared against immediate mode in the same context.
-    GLfloat projection[16] = {};
-    GLfloat modelview[16] = {};
-    glGetFloatv(GL_PROJECTION_MATRIX, projection);
-    glGetFloatv(GL_MODELVIEW_MATRIX, modelview);
-
-    // Column-major, as OpenGL stores them: transform = projection * modelview.
-    GLfloat transform[16] = {};
-    for (int column = 0; column < 4; column++)
-    {
-        for (int row = 0; row < 4; row++)
-        {
-            float sum = 0.0f;
-            for (int k = 0; k < 4; k++)
-                sum += projection[k * 4 + row] * modelview[column * 4 + k];
-
-            transform[column * 4 + row] = sum;
-        }
-    }
+    // The transform comes from our own stack rather than being read back from
+    // GL. That is what a Core profile will require, and it also removes two
+    // glGetFloatv calls per draw - a pipeline stall each, on every gump and tile.
+    float transform[16] = {};
+    g_GLMatrix.Transform(transform);
 
     glUseProgram(m_Program);
     glUniformMatrix4fv(m_UniformTransform, 1, GL_FALSE, transform);
