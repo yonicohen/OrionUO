@@ -1,0 +1,145 @@
+name: Release
+
+# Tag a commit to publish: git tag v1.0.0 && git push origin v1.0.0
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build and publish"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (arm64)
+            runner: macos-latest
+            artifact: orionuo-macos-arm64
+            binary: build/OrionUO/OrionUO
+          - name: Linux (x86_64)
+            runner: ubuntu-latest
+            artifact: orionuo-linux-x86_64
+            binary: build/OrionUO/OrionUO
+          - name: Windows (x64)
+            runner: windows-latest
+            artifact: orionuo-windows-x64
+            binary: build/OrionUO/Release/OrionUO.exe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Releases come from master only. A tag can be pushed pointing anywhere, and
+      # publishing a build of some half-finished branch as a release is worse than
+      # not publishing at all.
+      - name: Verify the tag is on master
+        shell: bash
+        run: |
+          set -eu
+          git fetch -q origin master
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::$GITHUB_SHA is not an ancestor of origin/master - refusing to release."
+            exit 1
+          fi
+          echo "Tagged commit is on master."
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew update
+          brew install cmake ninja sdl2 sdl2_image sdl2_mixer freeimage glew
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build cmake \
+            libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev \
+            libfreeimage-dev libglew-dev libglu1-mesa-dev xorg-dev
+
+      - name: Build (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
+          ninja -C build OrionUO
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -A x64 -S . -B build
+          cmake --build build --config Release --target OrionUO
+
+      # The client plus what CMake stages next to it - on Unix that is the MIDI
+      # soundfont, without which .mid music will not play at all; on Windows it is
+      # also the bundled DLLs. OrionData is not copied: the client generates it on
+      # first run.
+      #
+      # UO's own data files are never redistributed. They are copyright, and
+      # INSTRUCTIONS.md explains how to point the client at your shard's copy.
+      - name: Package
+        shell: bash
+        run: |
+          set -eu
+          binary_dir="$(dirname "${{ matrix.binary }}")"
+
+          mkdir -p package
+          cp "${{ matrix.binary }}" package/
+          cp README.md INSTRUCTIONS.md package/
+
+          # Everything the build staged beside the binary, skipping CMake's own
+          # bookkeeping and anything the client wrote while being built.
+          for staged in "$binary_dir"/*; do
+            name="$(basename "$staged")"
+            case "$name" in
+              CMakeFiles|cmake_install.cmake|*.cmake|OrionUO|OrionUO.exe) continue ;;
+              crashlogs|snapshots|Desktop|OrionData|uo_debug.cfg) continue ;;
+            esac
+            cp -R "$staged" package/ || true
+          done
+
+          echo "Packaged:"
+          ls -la package
+          tar -czf "${{ matrix.artifact }}.tar.gz" -C package .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: artifacts/**/*.tar.gz
+          body: |
+            Builds of the macOS port of OrionUO.
+
+            **The UO data files are not included.** They are copyright and cannot be
+            redistributed; you need them from your shard. See INSTRUCTIONS.md in the
+            archive for the setup, which is four steps.
+
+            The Windows and Linux builds come from the same source but have had far
+            less use than the macOS one, which is the platform this port was made for.

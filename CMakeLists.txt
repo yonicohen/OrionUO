@@ -51,13 +51,21 @@ if(ORION_WINDOWS)
 	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /MD")
 	set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /MDd")
 
-	if(NOT "${CMAKE_GENERATOR}" MATCHES "(Win64|IA64)")
-		set(_WIN_TARGET "Win32")
-		set(ORION_64BITS 0)
-	else()
+	# Architecture used to be part of the generator name - "Visual Studio 15 2017
+	# Win64" - and this matched on that. CMake 3.1 moved it to CMAKE_GENERATOR_PLATFORM,
+	# set by -A, so on any current generator the old test silently reported 32 bit
+	# and the build then looked for x64 libraries in Dependencies/lib/Win32.
+	# CMAKE_SIZEOF_VOID_P is the reliable answer and covers both conventions.
+	if("${CMAKE_GENERATOR}" MATCHES "(Win64|IA64)" OR
+	   "${CMAKE_GENERATOR_PLATFORM}" MATCHES "(x64|X64|ARM64)" OR
+	   CMAKE_SIZEOF_VOID_P EQUAL 8)
 		set(_WIN_TARGET "x64")
 		set(ORION_64BITS 1)
+	else()
+		set(_WIN_TARGET "Win32")
+		set(ORION_64BITS 0)
 	endif()
+	message(STATUS "Windows target: ${_WIN_TARGET}")
 
 	set(DEP_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/Dependencies/include")
 	set(DEP_LIB_DIR "${CMAKE_SOURCE_DIR}/Dependencies/lib/${_WIN_TARGET}/")
