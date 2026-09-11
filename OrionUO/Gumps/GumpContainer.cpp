@@ -455,13 +455,18 @@ void CGumpContainer::UpdateContent()
                     GridBorder + ((gridIndex - 1) / GridColumns - m_GridScrollRow) * GridCellSize;
 
                 CGUIText *countText =
-                    (CGUIText *)m_DataBox->Add(new CGUIText(0x0481, cellX + 3, cellY + GridCellSize - 18));
+                    (CGUIText *)m_DataBox->Add(new CGUIText(0x0481, cellX, cellY + GridCellSize - 16));
                 // Font 0. Font 9 renders nothing here - this was already found once and
                 // then undone by a careless edit.
                 // Unicode rather than the ASCII faces: font 0 there is the large
                 // runic one that overflowed the cell, and 1 and 9 render nothing
                 // at all in this gump. The unicode face is small and legible.
-                countText->CreateTextureW(0, ToWString(GridCountText(obj->Count)));
+                // Unicode face 1 is a size down from 0, which is the one used for
+                // body text and was bigger than a stack label needs. Given the
+                // cell's width and TS_CENTER it centres itself along the bottom,
+                // rather than being pinned to a corner.
+                countText->CreateTextureW(
+                    1, ToWString(GridCountText(obj->Count)), 30, GridCellSize, TS_CENTER);
             }
         }
     }
