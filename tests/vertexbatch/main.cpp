@@ -80,6 +80,7 @@ static void SceneCircleGradient(bool useBatch)
 {
     glDisable(GL_TEXTURE_2D);
     glColor4f(1.0f, 0.25f, 0.5f, 1.0f);
+    glTranslatef(128.0f, 128.0f, 0.0f);
     g_GLMatrix.Translate(128.0f, 128.0f, 0.0f);
 
     const float radius = 100.0f;
@@ -110,6 +111,7 @@ static void SceneCircleGradient(bool useBatch)
         glEnd();
     }
 
+    glTranslatef(-128.0f, -128.0f, 0.0f);
     g_GLMatrix.Translate(-128.0f, -128.0f, 0.0f);
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
     glEnable(GL_TEXTURE_2D);
@@ -204,7 +206,17 @@ static void Render(SceneFn fn, bool useBatch, std::vector<unsigned char> &out)
     glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // Drive both: GL for the immediate-mode reference, the stack for the shader.
+    // The reference path is set up with raw GL and the shader path with the
+    // matrix stack, deliberately. Driving both from the stack makes a fault in
+    // the shared projection cancel out between them - which is how this harness
+    // once reported five of five on a build that drew everything upside down.
+    // Comparing against GL means the stack's own maths is what is under test.
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glOrtho(0, WIDTH, HEIGHT, 0, -150, 150);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+
     g_GLMatrix.Ortho(0.0f, (float)WIDTH, (float)HEIGHT, 0.0f, -150.0f, 150.0f);
     g_GLMatrix.LoadIdentity();
 
@@ -252,6 +264,10 @@ int main(int, char **)
 
     int failures = 0;
     const int sceneCount = (int)(sizeof(SCENES) / sizeof(SCENES[0]));
+
+    // The stack normally mirrors into GL so the fixed function fallback keeps
+    // working. Here that would make it impossible for the two to disagree.
+    g_GLMatrix.SetForwardToGL(false);
 
     const bool shaderReady = g_GLBatchShader.Init();
     printf("shader pipeline: %s\n\n", shaderReady ? "available" : "NOT available");

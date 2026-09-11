@@ -483,7 +483,10 @@ void CGLEngine::BeginDraw()
     Drawing = true;
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-    glLoadIdentity();
+
+    // Resets the stack's modelview as well as GL's. Without this ours would
+    // accumulate every translation ever applied, since nothing else clears it.
+    g_GLMatrix.LoadIdentity();
 
     glDisable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
@@ -555,8 +558,7 @@ void CGLEngine::ViewPortScaled(int x, int y, int width, int height)
         (int)((g_OrionWindow.GetSize().Height - y - height) * pixelRatio),
         (int)(width * pixelRatio),
         (int)(height * pixelRatio));
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
+
 
     GLdouble left = (GLdouble)x;
     GLdouble right = (GLdouble)(width + x);
@@ -569,8 +571,7 @@ void CGLEngine::ViewPortScaled(int x, int y, int width, int height)
     left = (left * g_GlobalScale) - (newRight - right);
     top = (top * g_GlobalScale) - (newBottom - bottom);
 
-    glOrtho(left, newRight, newBottom, top, -150.0, 150.0);
-    glMatrixMode(GL_MODELVIEW);
+    g_GLMatrix.Ortho((float)left, (float)newRight, (float)newBottom, (float)top, -150.0f, 150.0f);
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::ViewPort(int x, int y, int width, int height)

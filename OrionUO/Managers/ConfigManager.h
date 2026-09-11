@@ -27,7 +27,11 @@ protected:
     bool m_Music = false;
     uchar m_SoundVolume = 255;
     uchar m_MusicVolume = 255;
-    uchar m_ClientFPS = 32;
+    // 32 was a reasonable default when this client was written and is not one
+    // now: it renders at half the rate of a 60Hz panel and a quarter of a 120Hz
+    // one, on a game that costs very little to draw. 100 is 10ms a frame, which
+    // the millisecond frame timer can express exactly.
+    uchar m_ClientFPS = 100;
     bool m_UseScaling = false;
     uchar m_DrawStatusState = 0;
     bool m_DrawStumps = false;
