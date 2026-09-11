@@ -479,7 +479,7 @@ void CGumpContainer::Draw()
 
     if (!Minimized)
     {
-        glTranslatef(g_GumpTranslate.X, g_GumpTranslate.Y, 0.0f);
+        g_GLMatrix.Translate(g_GumpTranslate.X, g_GumpTranslate.Y, 0.0f);
 
         g_FontColorizerShader.Use();
 
@@ -487,7 +487,7 @@ void CGumpContainer::Draw()
 
         UnuseShader();
 
-        glTranslatef(-g_GumpTranslate.X, -g_GumpTranslate.Y, 0.0f);
+        g_GLMatrix.Translate(-g_GumpTranslate.X, -g_GumpTranslate.Y, 0.0f);
     }
 }
 //----------------------------------------------------------------------------------

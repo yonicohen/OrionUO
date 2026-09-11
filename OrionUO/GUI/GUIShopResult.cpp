@@ -62,14 +62,14 @@ void CGUIShopResult::PrepareTextures()
 void CGUIShopResult::Draw(bool checktrans)
 {
     WISPFUN_DEBUG("c74_f5");
-    glTranslatef((GLfloat)m_X, (GLfloat)m_Y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)m_X, (GLfloat)m_Y, 0.0f);
 
     glUniform1iARB(g_ShaderDrawMode, SDM_NO_COLOR);
 
     m_NameText.Draw(34, 0, checktrans);
     m_MinMaxButtons->Draw(checktrans);
 
-    glTranslatef((GLfloat)-m_X, (GLfloat)-m_Y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-m_X, (GLfloat)-m_Y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 bool CGUIShopResult::Select()

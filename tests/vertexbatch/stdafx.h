@@ -17,5 +17,6 @@
 // The client defines it in GLArtUpscale.cpp, which this test does not build.
 extern bool g_SharpFilter;
 
+#include "GLMatrixStack.h"
 #include "GLVertexBatchShader.h"
 #include "GLVertexBatch.h"

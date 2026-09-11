@@ -9,12 +9,12 @@
 ** program, one streaming vertex buffer, and generic vertex attributes, replacing
 ** glEnableClientState and the client-side arrays.
 **
-** It is deliberately usable from the existing OpenGL 2.1 compatibility context.
-** The transform still comes from the fixed function matrix stack, read back with
-** glGetFloatv, so this can be proven pixel-for-pixel against immediate mode
-** before the 61 glTranslatef call sites are touched. Replacing the matrix stack
-** is the next step, and moving to a Core profile the one after; neither is
-** possible until the drawing itself no longer needs the fixed function pipeline.
+** The transform comes from CGLMatrixStack rather than from GL, so nothing here
+** needs the fixed function pipeline any more. What still does is the context
+** itself: it is created as 2.1 compatibility, and CGLMatrixStack mirrors every
+** operation into GL so the fixed function fallback keeps working and the two
+** paths stay comparable. Asking for a Core profile is now a change of two lines
+** and a lot of testing, rather than a rewrite.
 **
 ************************************************************************************
 */

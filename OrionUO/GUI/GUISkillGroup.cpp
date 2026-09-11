@@ -119,7 +119,7 @@ WISP_GEOMETRY::CSize CGUISkillGroup::GetSize()
 void CGUISkillGroup::Draw(bool checktrans)
 {
     WISPFUN_DEBUG("c75_f9");
-    glTranslatef((GLfloat)m_X, (GLfloat)m_Y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)m_X, (GLfloat)m_Y, 0.0f);
 
     m_Minimizer->Draw(checktrans);
 
@@ -146,15 +146,15 @@ void CGUISkillGroup::Draw(bool checktrans)
 
     if (!GetMinimized() && m_Items != NULL)
     {
-        glTranslatef(0.0f, 19.0f, 0.0f);
+        g_GLMatrix.Translate(0.0f, 19.0f, 0.0f);
 
         QFOR(item, m_Items, CBaseGUI *)
         item->Draw(checktrans);
 
-        glTranslatef(0.0f, -19.0f, 0.0f);
+        g_GLMatrix.Translate(0.0f, -19.0f, 0.0f);
     }
 
-    glTranslatef((GLfloat)-m_X, (GLfloat)-m_Y, 0.0f);
+    g_GLMatrix.Translate((GLfloat)-m_X, (GLfloat)-m_Y, 0.0f);
 }
 //----------------------------------------------------------------------------------
 bool CGUISkillGroup::Select()

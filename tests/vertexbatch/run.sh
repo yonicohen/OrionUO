@@ -23,6 +23,7 @@ clang++ -std=c++14 -O1 -g \
     "$here/main.cpp" \
     "$repo/OrionUO/GLEngine/GLVertexBatch.cpp" \
     "$repo/OrionUO/GLEngine/GLVertexBatchShader.cpp" \
+    "$repo/OrionUO/GLEngine/GLMatrixStack.cpp" \
     $(sdl2-config --libs) \
     -framework OpenGL
 
