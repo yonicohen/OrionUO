@@ -12,6 +12,7 @@
 #include "stdafx.h"
 
 bool g_ForceGridContainers = false;
+ushort g_GridContainerBackground = 0x0BB8;
 #include "FileSystem.h"
 //----------------------------------------------------------------------------------
 CConfigManager g_ConfigManager;
@@ -286,7 +287,11 @@ void CConfigManager::SetClientFPS(uchar val)
         else if (m_ClientFPS > MAX_FPS_LIMIT)
             m_ClientFPS = MAX_FPS_LIMIT;
 
-        g_FrameDelay[1] = 1000 / m_ClientFPS;
+        // Round to nearest rather than truncating: at 144 the truncated delay is
+        // 6ms, which is 167fps, overshooting the requested rate by a sixth.
+        g_FrameDelay[1] = (int)((1000.0f / m_ClientFPS) + 0.5f);
+        if (g_FrameDelay[1] < 1)
+            g_FrameDelay[1] = 1;
 
         if (!m_ReduceFPSUnactiveWindow)
             g_FrameDelay[0] = g_FrameDelay[1];
