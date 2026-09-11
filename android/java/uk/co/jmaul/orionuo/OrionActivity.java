@@ -1,6 +1,10 @@
 package uk.co.jmaul.orionuo;
 
+import android.graphics.Rect;
+import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
+import android.view.WindowInsets;
 
 import org.libsdl.app.SDLActivity;
 
@@ -69,6 +73,42 @@ public class OrionActivity extends SDLActivity
             return fromFile.toArray(new String[0]);
 
         return super.getArguments();
+    }
+
+    /**
+     * Height in pixels of the soft keyboard, or 0 when it is down.
+     *
+     * SDL draws into a SurfaceView that keeps the full window, so the keyboard
+     * simply covers the bottom of the rendered frame and nothing native ever
+     * hears about it - which left the login panel, which sits at the bottom of
+     * the 640x480 pre-game artwork, permanently underneath it. The renderer
+     * asks for this and scales that artwork into what is left.
+     */
+    public static int getSoftKeyboardHeight()
+    {
+        try
+        {
+            View root = mSingleton.getWindow().getDecorView();
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+            {
+                WindowInsets insets = root.getRootWindowInsets();
+                if (insets != null)
+                    return insets.getInsets(WindowInsets.Type.ime()).bottom;
+            }
+
+            // Before API 30 there is no ime() inset, so infer it from how much
+            // of the window is still visible. A small difference is the status
+            // or navigation bar rather than a keyboard.
+            Rect visible = new Rect();
+            root.getWindowVisibleDisplayFrame(visible);
+            int covered = root.getHeight() - visible.bottom;
+            return (covered > root.getHeight() / 5) ? covered : 0;
+        }
+        catch (Exception e)
+        {
+            return 0;
+        }
     }
 
     private List<String> readArgumentsFile()

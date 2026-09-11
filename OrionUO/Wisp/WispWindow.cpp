@@ -302,7 +302,15 @@ bool CWindow::Create(
     // Without this SDL delivers no SDL_TEXTINPUT events at all, so every text
     // field in the client silently ignores typing. It is not implicitly enabled:
     // SDL3 (which sdl2-compat sits on) requires it per window.
+    //
+    // Not on Android, where it also raises the soft keyboard: leaving it on from
+    // startup put the keyboard over the bottom half of the screen for the whole
+    // session, including over the login panel it was covering. There it is
+    // turned on and off to follow the focused text field instead - see
+    // UpdateTextInput().
+#if !defined(__ANDROID__)
     SDL_StartTextInput();
+#endif
 
     SDL_SysWMinfo info;
     SDL_VERSION(&info.version);
@@ -825,6 +833,32 @@ void CWindow::TouchMouseEvent(uint type, uchar button, const WISP_GEOMETRY::CPoi
 #endif
 }
 //----------------------------------------------------------------------------------
+void CWindow::ToggleTextInput()
+{
+    m_TextInputRequested = !m_TextInputRequested;
+}
+//----------------------------------------------------------------------------------
+void CWindow::UpdateTextInput(bool wanted)
+{
+#if defined(__ANDROID__)
+    wanted = wanted || m_TextInputRequested;
+
+    // Toggling this is what shows and hides the soft keyboard, so only ask for
+    // it while something is actually going to receive the typing.
+    if (wanted == m_TextInputActive)
+        return;
+
+    m_TextInputActive = wanted;
+
+    if (wanted)
+        SDL_StartTextInput();
+    else
+        SDL_StopTextInput();
+#else
+    (void)wanted;
+#endif
+}
+//----------------------------------------------------------------------------------
 void CWindow::ProcessTouch()
 {
 #if defined(__ANDROID__)
@@ -929,8 +963,20 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
 #if defined(__ANDROID__)
         case SDL_FINGERDOWN:
         {
-            if (g_Touch.Active) // a second finger; the first one owns the gesture
+            if (g_Touch.Active)
+            {
+                // A second finger while the first is still deciding what it is:
+                // the gesture for the soft keyboard, which is the only way to
+                // start typing in the world - the chat console holds focus
+                // there permanently, so following focus would leave the
+                // keyboard up over the game forever.
+                if (!g_Touch.LeftDown && !g_Touch.RightDown)
+                {
+                    ToggleTextInput();
+                    g_Touch.Active = false;
+                }
                 break;
+            }
 
             g_Touch.Finger = ev.tfinger.fingerId;
             g_Touch.Active = true;

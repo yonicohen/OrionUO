@@ -117,6 +117,11 @@ public:
 
     void UpdateRect();
 
+    // Height at the bottom of the window that something else is covering - the
+    // soft keyboard on Android, nothing anywhere else.
+    static int ObscuredHeight();
+    int m_ObscuredHeight = 0;
+
     //Очистить экран и начать рисование
     void BeginDraw();
 

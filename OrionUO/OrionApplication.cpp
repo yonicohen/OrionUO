@@ -23,6 +23,19 @@ void COrionApplication::OnMainLoop()
     // that stands in for the right button has to be noticed here.
     g_OrionWindow.ProcessTouch();
 
+    // The soft keyboard is only wanted while a text field has focus; anywhere
+    // else it covers the bottom half of the screen for nothing.
+    // Not the game console: in the world it holds focus permanently, so
+    // following it would keep the keyboard over the game for the whole session.
+    // A two-finger tap raises it there instead.
+    g_OrionWindow.UpdateTextInput(g_EntryPointer != nullptr && g_EntryPointer != &g_GameConsole);
+
+    // The keyboard sliding in or out changes how much of the window the
+    // pre-game screens have to fit into, and produces no resize event to hang
+    // that off.
+    if (g_GameState < GS_GAME && g_GL.ObscuredHeight() != g_GL.m_ObscuredHeight)
+        g_GL.UpdateRect();
+
     if (NextRenderTime <= g_Ticks)
     {
         NextUpdateTime = g_Ticks + 50;

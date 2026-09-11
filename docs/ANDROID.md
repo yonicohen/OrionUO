@@ -127,10 +127,9 @@ Roughly in order:
    GLES 1.1 translator is incomplete, and they should be harmless there but have
    never been confirmed against a real driver.
 2. **More of a touch control scheme.** The gestures below cover clicking,
-   dragging and walking, which is enough to play, but there is no pinch-zoom, no
-   two-finger gesture for a plain right click (context menus), and the on-screen
-   keyboard is whatever SDL raises for a text field - it covers the lower half of
-   the screen while it is up.
+   dragging, walking and the keyboard, which is enough to play, but there is no
+   pinch-zoom and no gesture left for a plain right click, so context menus - how
+   UO opens most of its interactions - cannot be reached.
 3. **Hues, via a GLES 2.0 renderer.** The shader classes are stubs under GLES,
    so nothing is hue-colorised: every mobile, item and piece of clothing draws in
    its base palette. Replacing them means replacing the fixed function matrix
@@ -203,6 +202,21 @@ distinguishable from the start of a walk. Because a finger resting on the screen
 generates no events, the hold is noticed from the frame loop rather than from an
 event.
 
+A two-finger tap raises and dismisses the soft keyboard. That gesture exists
+because following the focused field is not enough on its own: in the world UO's
+chat console holds focus permanently, so the keyboard would sit over the game
+for the whole session. Text input is therefore asked for when a field other than
+the console has focus - the login form, a book, a rename box - and by that
+gesture anywhere else.
+
+The keyboard also covers the bottom of the frame without SDL noticing: it draws
+into a SurfaceView that keeps the full window, so nothing native hears about it,
+and the login panel - which sits at the bottom of the 640x480 pre-game artwork -
+was permanently underneath it. `OrionActivity.getSoftKeyboardHeight()` reports
+the inset, and `UpdateRect` scales that artwork into what is left, so the whole
+form stays reachable (smaller) while the keyboard is up and springs back when it
+goes down.
+
 SDL's own touch-to-mouse synthesis is turned off (`SDL_HINT_TOUCH_MOUSE_EVENTS`):
 it only ever produces a left button, so it would deliver a left click at the
 start of every attempt to walk.
@@ -253,9 +267,9 @@ across a resize - are strictly better on the desktop too, and are not behind
 - Only ever run on an emulator; see the first item under "Left to do".
 - **No hues.** The shader classes are stubs, so everything draws in its base
   palette. This is very visible in the world.
-- The touch scheme covers clicking, dragging and walking; it has no pinch-zoom,
-  no gesture for a plain right click, and the soft keyboard covers half the
-  screen while it is up.
+- The touch scheme covers clicking, dragging, walking and raising the keyboard;
+  it has no pinch-zoom and no gesture for a plain right click, so context menus
+  are out of reach.
 - Sound has not been heard, and screenshots are stubbed out (FreeImage is not
   cross-built).
 - The `0xFACE` handshake, login crypto and networking are platform-independent

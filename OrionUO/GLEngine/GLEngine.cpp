@@ -283,6 +283,46 @@ void CGLEngine::Uninstall()
 #endif
 }
 //----------------------------------------------------------------------------------
+#if defined(__ANDROID__)
+#include <jni.h>
+
+// Height of the soft keyboard, from OrionActivity - see the comment there.
+// SDL keeps the window at its full size while the keyboard is up, so this is
+// the only way to know how much of the frame is actually visible.
+static int AndroidSoftKeyboardHeight()
+{
+    JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
+    jobject activity = (jobject)SDL_AndroidGetActivity();
+    if (env == nullptr || activity == nullptr)
+        return 0;
+
+    int result = 0;
+    jclass cls = env->GetObjectClass(activity);
+    if (cls != nullptr)
+    {
+        jmethodID method = env->GetStaticMethodID(cls, "getSoftKeyboardHeight", "()I");
+        if (method != nullptr)
+            result = (int)env->CallStaticIntMethod(cls, method);
+        else
+            env->ExceptionClear();
+
+        env->DeleteLocalRef(cls);
+    }
+
+    env->DeleteLocalRef(activity);
+    return result;
+}
+#endif
+//----------------------------------------------------------------------------------
+int CGLEngine::ObscuredHeight()
+{
+#if defined(__ANDROID__)
+    return AndroidSoftKeyboardHeight();
+#else
+    return 0;
+#endif
+}
+//----------------------------------------------------------------------------------
 void CGLEngine::UpdateRect()
 {
 #if USE_WISP
@@ -306,14 +346,20 @@ void CGLEngine::UpdateRect()
     // 640x480 on the way to the login screen and grow it again on the way out.
     if (g_GameState < GS_GAME)
     {
+        // Whatever the soft keyboard covers is not usable window: the login
+        // panel sits at the bottom of the 640x480 artwork, so scaling into the
+        // full height put it underneath the keyboard with no way to reach it.
+        m_ObscuredHeight = ObscuredHeight();
+        const int usableHeight = (height > m_ObscuredHeight) ? (height - m_ObscuredHeight) : height;
+
         const float scaleX = (float)width / (float)SceneWidth;
-        const float scaleY = (float)height / (float)SceneHeight;
+        const float scaleY = (float)usableHeight / (float)SceneHeight;
         SceneScale = (scaleX < scaleY) ? scaleX : scaleY;
 
         const int scaledWidth = (int)(SceneWidth * SceneScale);
         const int scaledHeight = (int)(SceneHeight * SceneScale);
         SceneOffsetX = (width - scaledWidth) / 2;
-        SceneOffsetY = (height - scaledHeight) / 2;
+        SceneOffsetY = (usableHeight - scaledHeight) / 2;
         LOG("UpdateRect: window %dx%d (x%.1f dpi) state=%d scale=%.2f offset=%d,%d\n",
             width,
             height,
@@ -709,11 +755,19 @@ void CGLEngine::ApplySceneProjection()
     if (g_GameState < GS_GAME && SceneScale > 0.0f)
     {
         const float pixelRatio = g_OrionWindow.GetPixelRatio();
+        const int scaledHeight = (int)(SceneHeight * SceneScale);
+
+        // SceneOffsetY is measured from the top, the way the mouse mapping and
+        // every gump coordinate are; a viewport's origin is the bottom left.
+        // The two agreed as long as the scene filled the window's height, and
+        // stopped agreeing once the soft keyboard took a bite out of it.
+        const int viewportY = g_OrionWindow.GetSize().Height - SceneOffsetY - scaledHeight;
+
         glViewport(
             (int)(SceneOffsetX * pixelRatio),
-            (int)(SceneOffsetY * pixelRatio),
+            (int)(viewportY * pixelRatio),
             (int)(SceneWidth * SceneScale * pixelRatio),
-            (int)(SceneHeight * SceneScale * pixelRatio));
+            (int)(scaledHeight * pixelRatio));
         g_GLMatrix.Ortho(0.0f, (float)SceneWidth, (float)SceneHeight, 0.0f, -150.0f, 150.0f);
         return;
     }

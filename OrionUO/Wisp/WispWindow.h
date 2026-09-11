@@ -76,7 +76,19 @@ public:
     // from Android.
     void ProcessTouch();
 
+    // Shows or hides the soft keyboard on Android, following whether a text
+    // field has focus. No-op elsewhere, where text input stays on for the life
+    // of the window.
+    void UpdateTextInput(bool wanted);
+
+    // In the world the chat console always holds focus, so following focus
+    // alone would leave the keyboard up over the game for the whole session.
+    // A two-finger tap asks for it instead, and asks again to dismiss it.
+    void ToggleTextInput();
+
 private:
+    bool m_TextInputActive = false;
+    bool m_TextInputRequested = false;
     void TouchMouseEvent(uint type, uchar button, const WISP_GEOMETRY::CPoint2Di &at);
 
 public:
