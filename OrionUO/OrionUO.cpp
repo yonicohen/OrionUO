@@ -2056,11 +2056,6 @@ void COrion::ServerSelection(int pos)
 //----------------------------------------------------------------------------------
 // True for loopback and the RFC1918 ranges, i.e. addresses that cannot be reached
 // from outside the server's own network.
-#if defined(ORION_WINDOWS)
-// inet_pton is declared in ws2tcpip.h rather than winsock2.h, which is what the
-// Windows include block pulls in.
-#include <ws2tcpip.h>
-#endif
 
 static bool IsPrivateAddress(const char *ip)
 {
