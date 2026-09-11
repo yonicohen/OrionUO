@@ -7,4 +7,5 @@
 #include <GLES/glext.h>
 
 #include "GLCompat.h"
+#include "GLVertexBatchShader.h"
 #include "GLVertexBatch.h"

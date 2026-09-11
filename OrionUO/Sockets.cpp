@@ -299,7 +299,10 @@ bool tcp_connect(tcp_socket socket, const char *address, uint16_t port)
     {
         he = gethostbyname(address);
         if (he == nullptr)
+        {
+            LOG("gethostbyname(%s) failed: h_errno=%d\n", address, h_errno);
             return false;
+        }
 
         memcpy(&caddr.sin_addr, he->h_addr, he->h_length);
     }
@@ -333,7 +336,11 @@ bool tcp_connect(tcp_socket socket, const char *address, uint16_t port)
     if (connected)
         LOG("socket connected\n");
     else
-        LOG("socket connect failed\n");
+        LOG("socket connect to %s:%u failed: errno=%d (%s)\n",
+            inet_ntoa(caddr.sin_addr),
+            (unsigned)port,
+            errno,
+            strerror(errno));
     return connected;
 }
 

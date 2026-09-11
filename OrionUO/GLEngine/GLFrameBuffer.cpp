@@ -31,7 +31,12 @@ CGLFrameBuffer::~CGLFrameBuffer()
 bool CGLFrameBuffer::Init(int width, int height)
 {
     WISPFUN_DEBUG("c30_f3");
-    Free();
+    // Only the colour texture is thrown away; the framebuffer object itself is
+    // kept and re-attached below. Deleting it here used to be part of Free(),
+    // and glDeleteFramebuffersOES crashes inside the Android emulator's GLES
+    // encoder - which a gump resize reached on the way into the world.
+    Texture.Clear();
+    m_Ready = false;
 
     bool result = false;
 
@@ -39,7 +44,7 @@ bool CGLFrameBuffer::Init(int width, int height)
     {
         glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
         glGenTextures(1, &Texture.Texture);
-        glBindTexture(GL_TEXTURE_2D, Texture.Texture);
+        g_GL.SetBoundTexture(Texture.Texture);
 #if defined(ORION_GLES)
         // Gump framebuffers are arbitrary sizes, so almost always non-power-of-two.
         // GLES treats an NPOT texture as incomplete - it samples as solid black -
@@ -57,7 +62,9 @@ bool CGLFrameBuffer::Init(int width, int height)
         GLint currentFrameBuffer = 0;
         glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFrameBuffer);
 
-        glGenFramebuffers(1, &m_FrameBuffer);
+        if (m_FrameBuffer == 0)
+            glGenFramebuffers(1, &m_FrameBuffer);
+
         glBindFramebuffer(GL_FRAMEBUFFER, m_FrameBuffer);
 
         glFramebufferTexture2D(
@@ -107,7 +114,7 @@ void CGLFrameBuffer::Release()
     {
         glBindFramebuffer(GL_FRAMEBUFFER, m_OldFrameBuffer);
 
-        glBindTexture(GL_TEXTURE_2D, Texture.Texture);
+        g_GL.SetBoundTexture(Texture.Texture);
 #if !defined(ORION_GLES)
         // Not wanted under GLES: the texture uses a non-mipmapped filter there,
         // precisely so that an NPOT framebuffer is a complete texture.
@@ -153,7 +160,7 @@ bool CGLFrameBuffer::Use()
 
         glGetIntegerv(GL_FRAMEBUFFER_BINDING, &m_OldFrameBuffer);
         glBindFramebuffer(GL_FRAMEBUFFER, m_FrameBuffer);
-        glBindTexture(GL_TEXTURE_2D, Texture.Texture);
+        g_GL.SetBoundTexture(Texture.Texture);
 
         glViewport(0, 0, Texture.Width, Texture.Height);
 

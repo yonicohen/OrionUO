@@ -43,6 +43,9 @@ private:
     bool m_Normaled = false;
 
     float m_CurrentColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    // The colour that was current when this batch first called Color(), so End()
+    // can hand it back rather than leaving the batch's own colour behind.
+    float m_RestoreColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
     float m_CurrentTexCoord[2] = { 0.0f, 0.0f };
     float m_CurrentNormal[3] = { 0.0f, 0.0f, 1.0f };
 
@@ -87,6 +90,26 @@ public:
 };
 //----------------------------------------------------------------------------------
 extern CGLVertexBatch g_GLBatch;
+//----------------------------------------------------------------------------------
+// The current fixed function colour, tracked in software.
+//
+// A batch that submits a colour array leaves the current colour undefined, so
+// End() has to put back the colour the caller had. Asking GL for it does not
+// work everywhere: the Android emulator's GLES 1.1 encoder rejects
+// glGetFloatv(GL_CURRENT_COLOR) with GL_INVALID_ENUM and leaves the buffer
+// untouched, so the batch restored uninitialised stack garbage and every later
+// texture was modulated to black.
+//
+// The client sets the colour through here instead, with glColor4f/glColor4ub
+// redirected to it; GLVertexBatch.cpp undefines the macros to reach the real
+// entry points.
+extern float g_GLCurrentColor[4];
+
+void GLSetColor4f(float r, float g, float b, float a);
+void GLSetColor4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a);
+
+#define glColor4f GLSetColor4f
+#define glColor4ub GLSetColor4ub
 //----------------------------------------------------------------------------------
 #endif
 //----------------------------------------------------------------------------------

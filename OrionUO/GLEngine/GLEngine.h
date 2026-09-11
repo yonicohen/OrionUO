@@ -151,6 +151,12 @@ public:
 
     void ClearScissorList();
 
+    // Binds and records, unconditionally. Every glBindTexture has to go through
+    // here: BindTexture() below skips the call when it believes the texture is
+    // already current, so a direct bind anywhere else leaves that belief wrong
+    // and the next draw silently uses whatever texture was really bound.
+    void SetBoundTexture(GLuint texture);
+
     inline void BindTexture(GLuint texture);
 
     // Binds and records the source dimensions, which the shader needs in order

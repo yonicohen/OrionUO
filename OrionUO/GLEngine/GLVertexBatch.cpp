@@ -9,7 +9,28 @@
 //----------------------------------------------------------------------------------
 #include "stdafx.h"
 //----------------------------------------------------------------------------------
+// Reach the real entry points rather than the redirects in the header.
+#undef glColor4f
+#undef glColor4ub
+//----------------------------------------------------------------------------------
 CGLVertexBatch g_GLBatch;
+//----------------------------------------------------------------------------------
+float g_GLCurrentColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+//----------------------------------------------------------------------------------
+void GLSetColor4f(float r, float g, float b, float a)
+{
+    g_GLCurrentColor[0] = r;
+    g_GLCurrentColor[1] = g;
+    g_GLCurrentColor[2] = b;
+    g_GLCurrentColor[3] = a;
+
+    glColor4f(r, g, b, a);
+}
+//----------------------------------------------------------------------------------
+void GLSetColor4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a)
+{
+    GLSetColor4f(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f);
+}
 //----------------------------------------------------------------------------------
 void CGLVertexBatch::Reserve()
 {
@@ -39,11 +60,13 @@ void CGLVertexBatch::Begin(GLenum mode, bool textured)
 //----------------------------------------------------------------------------------
 void CGLVertexBatch::SeedColorsFromGL()
 {
-    // Vertices emitted before the first Color() call inherited whatever glColor
-    // state was current, so read it back and give them that, rather than letting
-    // the new colour apply retroactively to the whole batch.
-    GLfloat current[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    glGetFloatv(GL_CURRENT_COLOR, current);
+    // Vertices emitted before the first Color() call inherited whatever colour
+    // was current, so give them that rather than letting the new colour apply
+    // retroactively to the whole batch. It is also what End() puts back.
+    const float *current = g_GLCurrentColor;
+
+    for (int channel = 0; channel < 4; channel++)
+        m_RestoreColor[channel] = current[channel];
 
     const size_t emitted = m_Positions.size() / 2;
     m_Colors.clear();
@@ -60,8 +83,10 @@ void CGLVertexBatch::SeedColorsFromGL()
 //----------------------------------------------------------------------------------
 void CGLVertexBatch::SeedNormalsFromGL()
 {
-    GLfloat current[3] = { 0.0f, 0.0f, 1.0f };
-    glGetFloatv(GL_CURRENT_NORMAL, current);
+    // Nothing outside this class ever calls glNormal, so the current normal is
+    // always GL's default here - and reading it back would hit the same broken
+    // GLES query as the colour above.
+    const GLfloat current[3] = { 0.0f, 0.0f, 1.0f };
 
     const size_t emitted = m_Positions.size() / 2;
     m_Normals.clear();
@@ -180,9 +205,13 @@ void CGLVertexBatch::End()
     {
         glDisableClientState(GL_COLOR_ARRAY);
         // A colour array overwrites the current colour on some drivers; put the
-        // caller's colour back so the next draw is not tinted by ours.
-        glColor4f(
-            m_CurrentColor[0], m_CurrentColor[1], m_CurrentColor[2], m_CurrentColor[3]);
+        // caller's colour back so the next draw is not tinted by ours. That is
+        // the colour read back when this batch started colouring, NOT the last
+        // colour the batch used - restoring the latter left the whole client
+        // drawing through DrawCircle's transparent black, which modulates every
+        // following texture to nothing.
+        GLSetColor4f(
+            m_RestoreColor[0], m_RestoreColor[1], m_RestoreColor[2], m_RestoreColor[3]);
     }
 
     if (useTexCoords)
@@ -197,9 +226,7 @@ void CGLVertexBatch::DrawWithShader(int count)
     // The shader reads a colour per vertex, so batches that never called Color()
     // take the current fixed function colour - which is what the client sets
     // around most draws, and what those vertices would have been drawn with.
-    GLfloat uniformColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-    if (!m_Colored)
-        glGetFloatv(GL_CURRENT_COLOR, uniformColor);
+    const float *uniformColor = g_GLCurrentColor;
 
     const bool haveTexCoords = m_Textured && (int)(m_TexCoords.size() / 2) == count;
     const bool haveColors = m_Colored && (int)(m_Colors.size() / 4) == count;

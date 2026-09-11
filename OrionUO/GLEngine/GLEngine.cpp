@@ -374,7 +374,7 @@ void CGLEngine::GL1_BindTexture16(CGLTexture &texture, int width, int height, pu
     GLuint tex = 0;
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
+    SetBoundTexture(tex);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
     // Linear magnification: the pre-game screens are 640x480 artwork scaled up
@@ -469,7 +469,7 @@ void CGLEngine::GL1_BindTexture32(CGLTexture &texture, int width, int height, pu
     GLuint tex = 0;
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glGenTextures(1, &tex);
-    glBindTexture(GL_TEXTURE_2D, tex);
+    SetBoundTexture(tex);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -586,8 +586,25 @@ void CGLEngine::BeginDraw()
     glDisable(GL_STENCIL_TEST);
     glDisable(GL_BLEND);
 
+    // Everything the client draws is 1-bit alpha art masked by the alpha test:
+    // a transparent texel has to leave the pixel behind it alone.
     glEnable(GL_ALPHA_TEST);
     glAlphaFunc(GL_GREATER, 0.0f);
+
+#if defined(ORION_GLES)
+    // ...except that the Android emulator's GLES 1.1 translator ignores
+    // glAlphaFunc, so those texels were written rather than discarded - the
+    // full-screen frame gump wiped every gump drawn before it back to the
+    // framebuffer's transparent black, which is what left the pre-game screens
+    // showing nothing but their topmost artwork on a black field.
+    //
+    // Blending the same 1-bit alpha gives exactly what the alpha test would,
+    // and does not depend on that path working. Draws that want a different
+    // blend still set their own function; DisableBlending() puts this one back
+    // rather than switching blending off, so the mask survives.
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+#endif
 
     if (CanUseBuffer)
     {
@@ -780,14 +797,17 @@ void CGLEngine::ClearScissorList()
     glDisable(GL_SCISSOR_TEST);
 }
 //----------------------------------------------------------------------------------
+void CGLEngine::SetBoundTexture(GLuint texture)
+{
+    OldTexture = texture;
+    glBindTexture(GL_TEXTURE_2D, texture);
+}
+//----------------------------------------------------------------------------------
 inline void CGLEngine::BindTexture(GLuint texture)
 {
     WISPFUN_DEBUG("c29_f25");
     if (OldTexture != texture)
-    {
-        OldTexture = texture;
-        glBindTexture(GL_TEXTURE_2D, texture);
-    }
+        SetBoundTexture(texture);
 }
 //----------------------------------------------------------------------------------
 inline void CGLEngine::BindTexture(const CGLTexture &texture)
@@ -1146,6 +1166,78 @@ void CGLEngine::GL1_DrawShadow(const CGLTexture &texture, int x, int y, bool mir
     g_GLMatrix.Translate((GLfloat)-x, -translateY, 0.0f);
 }
 //----------------------------------------------------------------------------------
+namespace
+{
+bool IsPowerOfTwo(int value)
+{
+    return value > 0 && (value & (value - 1)) == 0;
+}
+
+// Emits the quad(s) for a texture tiled across drawWidth x drawHeight, with the
+// origin already translated to the top-left corner.
+//
+// The cheap way is one quad whose texture coordinates run past 1.0 and let
+// GL_REPEAT do the tiling. GLES 1.1 has no GL_OES_texture_npot, though: a
+// texture whose dimensions are not both powers of two is incomplete under
+// GL_REPEAT and samples as black, which is what swallowed the tiled stone
+// backgrounds on Android. Where that applies, emit one quad per repeat with
+// coordinates that stay inside [0, 1] instead.
+void EmitStretchedQuads(int texWidth, int texHeight, int drawWidth, int drawHeight)
+{
+    // A gump that failed to load has no dimensions, and the tiling loop below
+    // would step by zero and never terminate.
+    if (texWidth <= 0 || texHeight <= 0 || drawWidth <= 0 || drawHeight <= 0)
+        return;
+
+    const float drawCountX = drawWidth / (float)texWidth;
+    const float drawCountY = drawHeight / (float)texHeight;
+
+#if defined(ORION_GLES)
+    const bool wrapping = (drawCountX > 1.0f || drawCountY > 1.0f);
+    if (wrapping && (!IsPowerOfTwo(texWidth) || !IsPowerOfTwo(texHeight)))
+    {
+        for (int tileY = 0; tileY < drawHeight; tileY += texHeight)
+        {
+            const int tileHeight = min(texHeight, drawHeight - tileY);
+            const float v = tileHeight / (float)texHeight;
+
+            for (int tileX = 0; tileX < drawWidth; tileX += texWidth)
+            {
+                const int tileWidth = min(texWidth, drawWidth - tileX);
+                const float u = tileWidth / (float)texWidth;
+
+                g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
+                g_GLBatch.TexCoord(0.0f, v);
+                g_GLBatch.Vertex((float)tileX, (float)(tileY + tileHeight));
+                g_GLBatch.TexCoord(u, v);
+                g_GLBatch.Vertex((float)(tileX + tileWidth), (float)(tileY + tileHeight));
+                g_GLBatch.TexCoord(0.0f, 0.0f);
+                g_GLBatch.Vertex((float)tileX, (float)tileY);
+                g_GLBatch.TexCoord(u, 0.0f);
+                g_GLBatch.Vertex((float)(tileX + tileWidth), (float)tileY);
+                g_GLBatch.End();
+            }
+        }
+
+        return;
+    }
+#else
+    (void)&IsPowerOfTwo;
+#endif
+
+    g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
+    g_GLBatch.TexCoord(0.0f, drawCountY);
+    g_GLBatch.Vertex(0, (float)drawHeight);
+    g_GLBatch.TexCoord(drawCountX, drawCountY);
+    g_GLBatch.Vertex((float)drawWidth, (float)drawHeight);
+    g_GLBatch.TexCoord(0.0f, 0.0f);
+    g_GLBatch.Vertex(0, 0);
+    g_GLBatch.TexCoord(drawCountX, 0.0f);
+    g_GLBatch.Vertex((float)drawWidth, 0);
+    g_GLBatch.End();
+}
+} // namespace
+//----------------------------------------------------------------------------------
 void CGLEngine::GL1_DrawStretched(
     const CGLTexture &texture, int x, int y, int drawWidth, int drawHeight)
 {
@@ -1157,19 +1249,7 @@ void CGLEngine::GL1_DrawStretched(
 
     g_GLMatrix.Translate((GLfloat)x, (GLfloat)y, 0.0f);
 
-    float drawCountX = drawWidth / (float)width;
-    float drawCountY = drawHeight / (float)height;
-
-    g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
-    g_GLBatch.TexCoord(0.0f, drawCountY);
-    g_GLBatch.Vertex(0, drawHeight);
-    g_GLBatch.TexCoord(drawCountX, drawCountY);
-    g_GLBatch.Vertex(drawWidth, drawHeight);
-    g_GLBatch.TexCoord(0.0f, 0.0f);
-    g_GLBatch.Vertex(0, 0);
-    g_GLBatch.TexCoord(drawCountX, 0.0f);
-    g_GLBatch.Vertex(drawWidth, 0);
-    g_GLBatch.End();
+    EmitStretchedQuads(width, height, drawWidth, drawHeight);
 
     g_GLMatrix.Translate((GLfloat)-x, (GLfloat)-y, 0.0f);
 }
@@ -1282,16 +1362,9 @@ void CGLEngine::GL1_DrawResizepic(CGLTexture **th, int x, int y, int width, int 
 
         g_GLMatrix.Translate((GLfloat)drawX, (GLfloat)drawY, 0.0f);
 
-        g_GLBatch.Begin(GL_TRIANGLE_STRIP, true);
-        g_GLBatch.TexCoord(0.0f, drawCountY);
-        g_GLBatch.Vertex(0, drawHeight);
-        g_GLBatch.TexCoord(drawCountX, drawCountY);
-        g_GLBatch.Vertex(drawWidth, drawHeight);
-        g_GLBatch.TexCoord(0.0f, 0.0f);
-        g_GLBatch.Vertex(0, 0);
-        g_GLBatch.TexCoord(drawCountX, 0.0f);
-        g_GLBatch.Vertex(drawWidth, 0);
-        g_GLBatch.End();
+        (void)drawCountX;
+        (void)drawCountY;
+        EmitStretchedQuads(th[i]->Width, th[i]->Height, drawWidth, drawHeight);
 
         g_GLMatrix.Translate((GLfloat)-drawX, (GLfloat)-drawY, 0.0f);
     }

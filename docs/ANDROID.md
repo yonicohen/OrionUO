@@ -1,6 +1,9 @@
 # Android port
 
-Status of making this client run on Android, and what is left.
+The client builds, installs and plays on Android: it reaches the game world on
+an emulator, connects to a shard and renders the map, mobiles and the whole
+interface. What it does not yet have is hue colorisation, a touch control scheme
+and a single run on real hardware. Details below.
 
 The macOS port is the prerequisite and is done: see the top-level README. This
 document covers only the Android-specific work.
@@ -82,18 +85,12 @@ arrays, which GLES does not accept as a vertex array type. It is dead code on
 every platform - `CanUseBuffer` is hardcoded `false` - so it is removed for
 Android rather than ported.
 
-**The whole client cross-compiles and links.** All 247 translation units build
-for `aarch64-linux-android`, and they link into a 3.0 MB `libmain.so` against
+**The whole client cross-compiles and links.** All 250 translation units build
+for `aarch64-linux-android`, and they link into `libmain.so` against
 SDL2, SDL2_mixer, GLES 1.x, EGL, zlib and the NDK runtime. Every one of the 360
 symbols the library still needs is provided by something it links against, so a
 missing entry point fails at build time rather than when the phone tries to load
 it.
-
-```bash
-./tools/android-build-deps.sh     # once: cross-builds SDL2 and SDL2_mixer
-./tools/android-build.sh          # compiles, links, checks symbols
-./tools/android-build-apk.sh      # packages and signs an installable APK
-```
 
 **It packages as an APK.** `tools/android-build-apk.sh` produces a signed 5.8 MB
 `orionuo.apk` containing `libmain.so`, SDL2, SDL2_mixer and `libc++_shared.so`
@@ -124,73 +121,112 @@ The desktop build is unaffected by all of the above and still builds and renders
 
 Roughly in order:
 
-1. **Run it on real hardware.** It has been run on an emulator and gets a long
-   way (see below), but stalls in the emulator's own GLES 1.x texture path. A
-   device with a native `libGLESv1_CM` driver is the next test and the one that
-   matters.
-2. **Asset delivery.** The UO data is ~2.6 GB and cannot be redistributed, so it
-   cannot ship in the APK. It has to be side-loaded to external storage and
-   located at runtime, replacing the `CustomPath` lookup in `uo_debug.cfg`.
-3. **Touch input.** The client assumes a mouse with two buttons and a keyboard.
+1. **Run it on real hardware.** Everything below was done on an emulator. A
+   device with a vendor `libGLESv1_CM` driver is the next test and the one that
+   matters - several of the workarounds below exist only because the emulator's
+   GLES 1.1 translator is incomplete, and they should be harmless there but have
+   never been confirmed against a real driver.
+2. **Touch input.** The client assumes a mouse with two buttons and a keyboard.
    Movement is right-button-hold, targeting is left-click, and there is no
-   on-screen keyboard handling. This is a design problem, not a porting one.
-4. **Hues, via a GLES 2.0 renderer.** Replaces the fixed function matrix stack
-   and client-side vertex arrays as well, since GLES 2.0 has neither. This is
+   on-screen keyboard handling beyond what SDL gives for text fields. This is a
+   design problem, not a porting one.
+3. **Hues, via a GLES 2.0 renderer.** The shader classes are stubs under GLES,
+   so nothing is hue-colorised: every mobile, item and piece of clothing draws in
+   its base palette. Replacing them means replacing the fixed function matrix
+   stack and client-side vertex arrays too, since GLES 2.0 has neither. This is
    the largest remaining piece.
-5. **Sound on device.** `SoundBackend.cpp` and SDL2_mixer both build for
-   Android, but no audio has been played.
+4. **Sound on device.** `SoundBackend.cpp` and SDL2_mixer both build for Android,
+   but no audio has been heard.
+5. **Asset delivery.** The UO data is ~2.6 GB and cannot be redistributed, so it
+   cannot ship in the APK; today it is pushed to external storage with `adb`.
+   Something friendlier - an in-app copy from a user-chosen folder - is needed
+   before anyone but a developer can install this.
 
-## What happens when you run it
+## Running it
 
-On an `arm64-v8a` emulator (API 34, AOSP image) the client:
+```bash
+./tools/android-build-deps.sh     # once: cross-builds SDL2 and SDL2_mixer
+./tools/android-build.sh          # compiles, links, checks symbols
+./tools/android-build-apk.sh      # packages and signs an installable APK
+adb install -r build-android/apk/orionuo.apk
+```
 
-- loads `libmain.so`, finds `SDL_main` and runs it;
-- resolves its data path to app storage and reads the UO files from there;
-- creates a **GLES 1.1 context** and initialises the renderer:
+Then push the UO data - which is **not** in the APK and must never be put there -
+into the app's external files directory:
 
-  ```
-  GLES v(OpenGL ES-CM 1.1 (OpenGL ES 3.1.0 (ANGLE 2.1.1)))
-  Graphics Successfully Initialized
-  g_UseFrameBuffer = 0; CanUseBuffer = 0
-  ```
+```bash
+adb push "/path/to/Ultima Online/." /sdcard/Android/data/uk.co.jmaul.orionuo/files/
+```
 
-- loads anim1-5, speech, tiledata, fonts, skills and the map block table;
-- then **stalls in `glGenTextures`**, on the first texture it uploads:
+The client takes its shard address from the command line (`-login host,port`),
+and Android has no command line. `OrionActivity.getArguments()` supplies one,
+from either an intent extra or a file next to the data:
 
-  ```
-  #00 read
-  #01 qemu_pipe_read                           <- emulator's GL transport
-  #02 QemuPipeStream::commitBufferAndReadFully
-  #03 libGLESv1_enc.so  glGenTextures_enc
-  #04 libmain.so  CGLEngine::GL1_BindTexture16
-  #05 UOFileReader::ReadGump
-  #06 COrion::GetGumpDimension  <- COrion::Install
-  ```
+```bash
+printf -- '-login uo.example.com,2593\n' > orion_args.txt
+adb push orion_args.txt /sdcard/Android/data/uk.co.jmaul.orionuo/files/
+# or, per launch:
+adb shell am start -n uk.co.jmaul.orionuo/.OrionActivity --esa args "-login uo.example.com,2593"
+```
 
-The call that blocks is a plain `glGenTextures(1, &tex)`, and it blocks waiting
-on the emulator's host GL translator rather than in any of our code. The
-emulator also reports the same ANGLE-backed renderer whatever `-gpu` mode it is
-started with, and its GL stack dies outright after a run - the emulator's GLES 1.x
-support is emulated through ANGLE and is the weak link.
+One argument per line; `#` and `;` start a comment. Without either the client
+falls back to `login.cfg`, which in a stock UO install points at `127.0.0.1`.
 
-That GLES 1.x is the right target for this codebase was checked rather than
-assumed: asking for a GLES 2.0 context instead gets a real ES 3.1 context, and
-the client then segfaults immediately, because the renderer calls fixed function
-entry points that do not exist there. The ES-CM 1.1 path gets orders of
-magnitude further.
+`LOG()` goes to logcat on Android, so `adb logcat -s OrionUO` is the client's log.
 
-So the open question is whether a real device, with a vendor `libGLESv1_CM`
-driver rather than an emulated one, gets past that call. That has not been tried.
+On an `arm64-v8a` emulator (API 34, AOSP image, started with `-gpu host`) the
+client gets a GLES 1.1 context, draws the login screen, connects to a shard,
+logs in, picks a character and **renders the game world** - map, statics,
+mobiles, paperdoll, status bar, minimap, journal and chat all draw. The emulator
+must be started with `-gpu host`; SwiftShader's GLES 1.x emulation was the
+original blocker and never got a frame out.
+
+## Android-specific workarounds
+
+Things that are correct desktop GL but do not survive the trip, each found by
+bisecting a frame on the emulator rather than by reading a spec:
+
+- **The alpha test is ignored.** Every piece of UO art is 1-bit alpha masked by
+  `glAlphaFunc(GL_GREATER, 0)`, and the emulator's GLES 1.1 translator does not
+  discard those fragments - it writes them. The full-screen frame gump therefore
+  wiped every gump drawn before it back to transparent black, which is why the
+  pre-game screens showed nothing but their topmost artwork on a black field.
+  `CGLEngine::Install` now also enables blending under GLES, and `GLCompat.h`
+  turns `glDisable(GL_BLEND)` into "put the standard blend function back" so the
+  mask survives the client's own blend sections.
+- **`glDeleteFramebuffers` crashes.** Inside the emulator's GLES encoder, in
+  `GLClientState::removeFramebuffers`. `CGLFrameBuffer::Init` keeps the
+  framebuffer object and re-attaches a new colour texture instead of deleting and
+  regenerating it, which is what a gump resize used to do on the way into the
+  world.
+- **`glIsEnabled` crashes** in the same encoder, and `glGetFloatv` of
+  `GL_CURRENT_COLOR`/`GL_CURRENT_NORMAL` returns `GL_INVALID_ENUM` with the
+  buffer untouched. `CGLVertexBatch` used to read the current colour back from GL
+  to restore it after submitting a colour array; it now tracks the colour in
+  software (`g_GLCurrentColor`, with `glColor4f`/`glColor4ub` redirected to it),
+  which is both portable and cheaper.
+- **NPOT textures.** GLES 1.1 has no `GL_OES_texture_npot`, so a texture whose
+  dimensions are not powers of two is incomplete under `GL_REPEAT` and samples
+  black. Tiled gump backgrounds relied on texture coordinates past 1.0; under
+  GLES they are emitted as one quad per repeat with coordinates inside `[0, 1]`.
+  Framebuffer colour textures are clamped and non-mipmapped for the same reason.
+- **No `INTERNET` permission** meant `connect()` failed with the login screen
+  reporting "There is some problem communicating with Origin". It is in the
+  manifest now.
+
+Two of these - the software colour tracking and keeping the framebuffer object
+across a resize - are strictly better on the desktop too, and are not behind
+`#ifdef`s.
 
 ## Caveats
 
-- No frame has been drawn. The client starts, initialises a GLES 1.1 context
-  and loads its data on an emulator, but stops at the first texture upload, so
-  nothing has been rendered and no screenshot exists.
-- The texture format conversions have therefore never executed. They are
-  reasoned from the format definitions and verified only by the desktop build
-  still rendering correctly.
-- Touch input, sound and hues are all untested for the same reason.
+- Only ever run on an emulator; see the first item under "Left to do".
+- **No hues.** The shader classes are stubs, so everything draws in its base
+  palette. This is very visible in the world.
+- Touch input is whatever SDL synthesises from taps: usable for the pre-game
+  screens, not yet a playable control scheme.
+- Sound has not been heard, and screenshots are stubbed out (FreeImage is not
+  cross-built).
 - The `0xFACE` handshake, login crypto and networking are platform-independent
-  and are already working on macOS, so they are not expected to need changes.
+  and needed no changes.
 - UO data files are copyright and must never be bundled in an APK.

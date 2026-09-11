@@ -88,6 +88,22 @@ inline void glUniform1fv(GLint /*location*/, GLsizei /*count*/, const GLfloat * 
 {
 }
 
+// Blending stands in for the alpha test here - see CGLEngine::Install - so it
+// has to stay on. Draws that set their own blend function still work; this only
+// stops them switching the mask off when they are finished, and puts the
+// standard function back instead.
+inline void OrionGLDisable(GLenum cap)
+{
+    if (cap == GL_BLEND)
+    {
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        return;
+    }
+
+    glDisable(cap);
+}
+#define glDisable OrionGLDisable
+
 inline void glLightModeli(GLenum pname, GLint param)
 {
     glLightModelf(pname, (GLfloat)param);

@@ -2,6 +2,10 @@
 #ifndef WISPLOGGER_H
 #define WISPLOGGER_H
 //----------------------------------------------------------------------------------
+#if defined(__ANDROID__)
+#include <android/log.h>
+#endif
+//----------------------------------------------------------------------------------
 namespace WISP_LOGGER
 {
 //----------------------------------------------------------------------------------
@@ -24,7 +28,15 @@ namespace WISP_LOGGER
 #else
 #if CWISPLOGGER
 #define INITLOGGER(path)
+#if defined(__ANDROID__)
+// Android discards stdout, so a client built without Wisp would log nowhere at
+// all. logcat is where every other diagnostic on the platform goes, and is what
+// `adb logcat -s OrionUO` reads. The header is included above the namespace,
+// so the names it declares stay at global scope.
+#define LOG(...) ::__android_log_print(ANDROID_LOG_INFO, "OrionUO", __VA_ARGS__)
+#else
 #define LOG(...) fprintf(stdout, " LOG: " __VA_ARGS__)
+#endif
 #define LOG_DUMP(...)
 #else //CWISPLOGGER == 0
 #define INITLOGGER(path)
