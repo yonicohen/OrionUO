@@ -1,0 +1,93 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes an in-flight run pointless.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    name: macOS (arm64)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install cmake ninja sdl2 sdl2_image sdl2_mixer freeimage glew
+
+      - name: Configure
+        run: cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: ninja -C build OrionUO
+
+      # The renderer draws through a shader and a vertex buffer rather than the
+      # fixed function pipeline, and this checks the two produce the same pixels.
+      # It needs a GL context, which the macOS runners provide; the Linux ones do
+      # not without a display server, so it only runs here.
+      - name: Renderer equivalence test
+        run: ./tests/vertexbatch/run.sh
+
+      - name: Upload client
+        uses: actions/upload-artifact@v4
+        with:
+          name: orionuo-macos-arm64
+          path: build/OrionUO/OrionUO
+          if-no-files-found: error
+
+  linux:
+    name: Linux (x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build cmake \
+            libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev \
+            libfreeimage-dev libglew-dev libglu1-mesa-dev xorg-dev
+
+      - name: Configure
+        run: cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: ninja -C build OrionUO
+
+      - name: Upload client
+        uses: actions/upload-artifact@v4
+        with:
+          name: orionuo-linux-x86_64
+          path: build/OrionUO/OrionUO
+          if-no-files-found: error
+
+  windows:
+    name: Windows (x64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Windows builds against the libraries committed under Dependencies/, so
+      # there is nothing to install. This job has never been run before it was
+      # written, so treat a failure here as information rather than a surprise.
+      - name: Configure
+        run: cmake -G "Visual Studio 17 2022" -A x64 -S . -B build
+
+      - name: Build
+        run: cmake --build build --config Release --target OrionUO
+
+      - name: Upload client
+        uses: actions/upload-artifact@v4
+        with:
+          name: orionuo-windows-x64
+          path: build/OrionUO/Release/OrionUO.exe
+          if-no-files-found: error
