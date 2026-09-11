@@ -317,7 +317,21 @@ static int AndroidSoftKeyboardHeight()
 int CGLEngine::ObscuredHeight()
 {
 #if defined(__ANDROID__)
-    return AndroidSoftKeyboardHeight();
+    // Asked for once a frame, and each call is a JNI round trip into
+    // WindowInsets. The keyboard takes a couple of hundred milliseconds to
+    // slide in or out, so sampling four times a second is as responsive as
+    // sampling sixty.
+    static uint lastChecked = 0;
+    static int lastHeight = 0;
+
+    const uint now = SDL_GetTicks();
+    if (lastChecked == 0 || now - lastChecked >= 250)
+    {
+        lastChecked = now;
+        lastHeight = AndroidSoftKeyboardHeight();
+    }
+
+    return lastHeight;
 #else
     return 0;
 #endif
