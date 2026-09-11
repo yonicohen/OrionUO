@@ -414,7 +414,35 @@ else()
   add_executable(OrionUO ${SRCS} ${headers})
 endif()
 
-target_link_libraries(OrionUO PUBLIC ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} ${SDL2_MIXER_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENGL_LIBRARIES} ${FREEIMAGE_LIBRARIES} ${GLEW_LIBRARIES} ${THREAD})
+if(ORION_WINDOWS)
+  # Those variables come from find_package, which only runs on Unix here, so on
+  # Windows they are all empty and nothing gets linked - 76 unresolved externals.
+  # Windows builds against the import libraries committed under Dependencies/,
+  # the same ones the original #pragma comment(lib) lines named before CMake
+  # took over the build.
+  if(ORION_64BITS)
+    set(orion_deps_lib "${PROJECT_SOURCE_DIR}/Dependencies/lib/x64")
+  else()
+    set(orion_deps_lib "${PROJECT_SOURCE_DIR}/Dependencies/lib/Win32")
+  endif()
+
+  target_link_libraries(OrionUO PUBLIC
+    "${orion_deps_lib}/SDL2.lib"
+    "${orion_deps_lib}/SDL2main.lib"
+    "${orion_deps_lib}/glew32.lib"
+    "${orion_deps_lib}/FreeImage.lib"
+    "${orion_deps_lib}/bass.lib"
+    "${orion_deps_lib}/bassmidi.lib"
+    "${orion_deps_lib}/zdll.lib"
+    opengl32
+    glu32
+    winmm
+    Shlwapi
+    ws2_32
+    Psapi)
+else()
+  target_link_libraries(OrionUO PUBLIC ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} ${SDL2_MIXER_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENGL_LIBRARIES} ${FREEIMAGE_LIBRARIES} ${GLEW_LIBRARIES} ${THREAD})
+endif()
 
 orion_precompile(OrionUO)
 
