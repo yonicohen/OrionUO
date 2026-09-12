@@ -221,12 +221,17 @@ still fail unprivileged. Cosmetic only.
 
 ### Remaining stubs
 
-Twelve Win32 stubs remain `NOT_IMPLEMENTED`, all of them dead on this platform —
-they sit inside `#if USE_WISP` blocks or have working SDL equivalents:
-`_beginthreadex`/`_endthreadex` (SDL threads are used), `WideCharToMultiByte`/
-`MultiByteToWideChar` (`std::wstring_convert` is used), `WSAStartup`/`WSACleanup`,
+Twelve Win32 stubs remain `NOT_IMPLEMENTED`, and none of them is reached. Their
+callers sit inside `#if USE_WISP` blocks with working SDL equivalents on the
+`#else` side: `_beginthreadex`/`_endthreadex` (SDL threads), `WideCharToMultiByte`/
+`MultiByteToWideChar` (`std::wstring_convert`), `WSAStartup`/`WSACleanup`,
 `timeBeginPeriod`/`timeEndPeriod`, `DefWindowProc`, `AdjustWindowRectEx`,
 `CloseHandle`.
+
+`NOT_IMPLEMENTED` only prints a line to stdout, and a full session — startup,
+login, server list, in-world — logs none. The one that does run is
+`WSASetLastError(0)` in `Sockets.cpp`, and setting a Winsock error code on POSIX
+means nothing. They are dead code worth deleting for tidiness, not a gap.
 
 ---
 
@@ -262,7 +267,16 @@ they sit inside `#if USE_WISP` blocks or have working SDL equivalents:
 
 ## Download
 
-* Download [Orion Launcher](http://orionuo.online/Launcher.html) to set everything up and play right away!
+[Releases](https://github.com/yonicohen/OrionUO/releases) carries two archives
+per platform:
+
+* `ignis-uo-*` — the client set up to play [Ignis UO](https://uo.jmaul.co.uk).
+  Unpack it, run `./setup.sh` (`setup.cmd` on Windows), point it at your Ultima
+  Online folder, and it starts. See [IGNIS_UO.md](IGNIS_UO.md).
+* `orionuo-*` — the client on its own, for a shard you configure yourself.
+
+Upstream's [Orion Launcher](http://orionuo.online/Launcher.html) is Windows only
+and does not know about this fork's builds.
 
 ### Other Orion Projects
 
