@@ -11,6 +11,14 @@
 #define GLSHADER_H
 //----------------------------------------------------------------------------------
 void UnuseShader();
+
+// True while one of the client's own shaders is bound - the colorizer that
+// applies hues, or the death shader that greys the world out for a ghost.
+//
+// The vertex batch has a shader of its own and binds it per draw, which
+// silently replaced whichever of these was in use. The batch consults this and
+// falls back to the fixed function arrays those shaders were written against.
+extern bool g_ClientShaderActive;
 //----------------------------------------------------------------------------------
 //Базовый класс для работы с шейдерами
 class CGLShader
