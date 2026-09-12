@@ -489,7 +489,7 @@ LRESULT COrionWindow::OnUserMessages(int message, const WPARAM &wParam, const LP
 
             CPacketInfo &type = g_PacketManager.GetInfo(*buf);
 
-            LOG("--- ^(%d) s(+%d => %d) Plugin->Server:: %s\n",
+            LOG_VERBOSE("--- ^(%d) s(+%d => %d) Plugin->Server:: %s\n",
                 ticks - g_LastPacketTime,
                 size,
                 g_TotalSendSize,

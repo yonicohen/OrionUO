@@ -62,7 +62,7 @@ bool CMappedFile::Load()
 bool CMappedFile::Load(const os_path &path)
 {
     WISPFUN_DEBUG("c7_f2");
-    LOG("Mmaping  %s\n", CStringFromPath(path));
+    LOG_VERBOSE("Mmaping  %s\n", CStringFromPath(path));
     bool result = false;
 
     if (fs_path_exists(path))

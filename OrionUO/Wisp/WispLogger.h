@@ -6,6 +6,10 @@
 #include <android/log.h>
 #endif
 //----------------------------------------------------------------------------------
+// Declared out here, not inside the namespace below, so it is the same
+// g_LogVerbose that Globals.cpp defines.
+extern bool g_LogVerbose;
+//----------------------------------------------------------------------------------
 namespace WISP_LOGGER
 {
 //----------------------------------------------------------------------------------
@@ -44,6 +48,16 @@ namespace WISP_LOGGER
 #define LOG_DUMP(...)
 #endif //CWISPLOGGER!=0
 #endif
+
+// Per-frame chatter - the socket poll, texture sweeps, packet sizes, the frame
+// counter - drowns everything worth reading, and a session writes megabytes of
+// it. Those calls say LOG_VERBOSE and are silent unless --verbose is passed.
+#define LOG_VERBOSE(...)                                                                           \
+    do                                                                                             \
+    {                                                                                              \
+        if (::g_LogVerbose)                                                                        \
+            LOG(__VA_ARGS__);                                                                      \
+    } while (0)
 
 #define INITCRASHLOGGER(path) WISP_LOGGER::g_WispCrashLogger.Init(path);
 #define CRASHLOG WISP_LOGGER::g_WispCrashLogger.Print

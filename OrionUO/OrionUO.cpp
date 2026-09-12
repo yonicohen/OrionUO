@@ -2000,7 +2000,7 @@ int COrion::Send(puchar buf, int size)
         time(&rawtime);
         localtime_s(&timeinfo, &rawtime);
         strftime(buffer, sizeof(buffer), "%d-%m-%Y %H:%M:%S", &timeinfo);
-        LOG("--- ^(%d) s(+%d => %d) %s Client:: %s\n",
+        LOG_VERBOSE("--- ^(%d) s(+%d => %d) %s Client:: %s\n",
             ticks - g_LastPacketTime,
             size,
             g_TotalSendSize,
