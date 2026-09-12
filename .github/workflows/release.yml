@@ -12,6 +12,10 @@ on:
 
 permissions:
   contents: write
+  # Signing a provenance statement for each artifact, so a download can be tied
+  # back to the commit and the workflow that produced it.
+  id-token: write
+  attestations: write
 
 jobs:
   build:
@@ -268,6 +272,32 @@ jobs:
         with:
           path: artifacts
 
+      # Binds each file's digest to this repository, this commit and this
+      # workflow run, signed through Sigstore. Anyone can check a download with
+      #   gh attestation verify <file> -R ${{ github.repository }}
+      # and be told which commit it was built from - without trusting us, the
+      # release page, or whoever mirrored it.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.apk
+
+      # For anyone who would rather check a checksum by hand than install the gh
+      # CLI. Written into the release notes below.
+      - name: Checksums
+        id: checksums
+        shell: bash
+        run: |
+          set -eu
+          {
+            echo "sums<<CHECKSUMS_EOF"
+            (cd artifacts && find . -type f \( -name '*.tar.gz' -o -name '*.apk' \) |
+              sort | xargs shasum -a 256 | sed 's#\./[^/]*/##')
+            echo "CHECKSUMS_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Publish
         uses: softprops/action-gh-release@v2
         with:
@@ -317,3 +347,26 @@ jobs:
 
             The Windows and Linux builds come from the same source but have had far
             less use than the macOS one, which is the platform this port was made for.
+
+            ---
+
+            **Verifying a download.** Every file here is built by GitHub Actions
+            from this repository and carries a signed provenance statement tying
+            it to the commit it was built from. To check one:
+
+            ```
+            gh attestation verify orionuo-android-arm64.apk -R ${{ github.repository }}
+            ```
+
+            That reports the commit SHA and workflow that produced the file, and
+            fails if the bytes were altered or the file came from anywhere else.
+
+            SHA-256, if you would rather check by hand:
+
+            ```
+            ${{ steps.checksums.outputs.sums }}
+            ```
+
+            The Android APK is signed with the same key on every release, so one
+            of these will install over the last; an APK from anywhere else will
+            not.
