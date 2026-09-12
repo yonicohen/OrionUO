@@ -208,6 +208,22 @@ bool CGUITextEntry::Select()
     int x = g_MouseManager.Position.X - m_X;
     int y = g_MouseManager.Position.Y - m_Y;
 
-    return (x >= 0 && y >= 0 && x < m_Entry.m_Texture.Width && y < m_Entry.m_Texture.Height);
+    // The field is as wide as it was declared, not as wide as what has been
+    // typed into it so far. Hit testing the text alone means an empty field
+    // cannot be clicked at all - which on a desktop is hidden by Tab moving
+    // focus, and on a touch screen leaves a password box that can never be
+    // reached.
+    int width = m_Entry.m_Texture.Width;
+    int height = m_Entry.m_Texture.Height;
+
+    if (m_Entry.MaxWidth > width)
+        width = m_Entry.MaxWidth;
+
+    // An empty field has no texture at all, so it needs a height of its own.
+    // A line of text is close enough for something being aimed at with a finger.
+    if (height <= 0)
+        height = 16;
+
+    return (x >= 0 && y >= 0 && x < width && y < height);
 }
 //----------------------------------------------------------------------------------

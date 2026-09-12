@@ -139,6 +139,11 @@ private:
     // stuck at "shown" and every later tap on a field did nothing, so a tap
     // always re-asks.
     bool m_TextInputDirty = false;
+    // The tap landed on a text field, rather than merely happening while one was
+    // focused. Tapping a field is the whole gesture for "I want to type".
+    bool m_TappedTextEntry = false;
+    // Which field is focused, to notice focus moving between them.
+    const void *m_LastTextEntry = nullptr;
 
     void TouchMouseEvent(uint type, uchar button, const WISP_GEOMETRY::CPoint2Di &at);
 
