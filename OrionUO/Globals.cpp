@@ -61,6 +61,7 @@ bool g_ShowGumpLocker = false;
 bool g_GrayedPixels = false;
 
 bool g_ConfigLoaded = false;
+bool g_AutoReconnecting = false;
 bool g_ClientShaderActive = false;
 bool g_LogVerbose = false;
 

@@ -1793,6 +1793,7 @@ void COrion::LoadLocalConfig(int serial)
         g_SoundManager.StopMusic();
 
     g_ConfigLoaded = true;
+    g_AutoReconnecting = false;
 }
 //----------------------------------------------------------------------------------
 void COrion::SaveLocalConfig(int serial)
@@ -6700,7 +6701,12 @@ void COrion::StartReconnect()
     if (!g_ConnectionManager.Connected() || g_World == NULL)
     {
         LogOut();
-        g_MainScreen.m_AutoLogin->Checked = true;
+        // Not m_AutoLogin->Checked: that is the player's own setting, it gets
+        // written to uo_debug.cfg, and setting it here meant a single dropped
+        // connection silently took the server and character screens away for
+        // good - the client logged you straight back in even after you had
+        // deliberately logged out. Upstream issue #122.
+        g_AutoReconnecting = true;
         InitScreen(GS_MAIN);
         g_OrionWindow.CreateTimer(COrionWindow::FASTLOGIN_TIMER_ID, 50);
     }

@@ -85,7 +85,8 @@ void CServerList::ParsePacket(WISP_DATASTREAM::CDataReader &reader)
         pingThread->Run();
     }
 
-    if (g_ServerList.LastServerIndex < numServers && g_MainScreen.m_AutoLogin->Checked)
+    if (g_ServerList.LastServerIndex < numServers &&
+        (g_MainScreen.m_AutoLogin->Checked || g_AutoReconnecting))
         g_Orion.ServerSelection(g_ServerList.LastServerIndex);
     else
         g_Orion.InitScreen(GS_SERVER);
