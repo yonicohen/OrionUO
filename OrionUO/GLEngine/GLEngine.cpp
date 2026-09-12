@@ -435,7 +435,18 @@ void CGLEngine::GL1_BindTexture16(CGLTexture &texture, int width, int height, pu
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glGenTextures(1, &tex);
     SetBoundTexture(tex);
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+
+    // Creating a texture has no business setting the texture environment - that
+    // is per texture unit, not per texture - but Install() leaves it on REPLACE
+    // and this is what has always switched it to MODULATE, so it stays. What it
+    // must not do is run while the death greyscale has the environment set up
+    // for it: art is uploaded lazily, so walking into new ground broke the chain
+    // partway through a frame and everything darker than mid grey came out
+    // black.
+#if defined(ORION_GLES)
+    if (!GLGrayscaleActive())
+#endif
+        glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
     // Linear magnification: the pre-game screens are 640x480 artwork scaled up
     // to fill the window, and GL_NEAREST makes that visibly blocky. At 1:1, which
@@ -530,7 +541,18 @@ void CGLEngine::GL1_BindTexture32(CGLTexture &texture, int width, int height, pu
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     glGenTextures(1, &tex);
     SetBoundTexture(tex);
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+
+    // Creating a texture has no business setting the texture environment - that
+    // is per texture unit, not per texture - but Install() leaves it on REPLACE
+    // and this is what has always switched it to MODULATE, so it stays. What it
+    // must not do is run while the death greyscale has the environment set up
+    // for it: art is uploaded lazily, so walking into new ground broke the chain
+    // partway through a frame and everything darker than mid grey came out
+    // black.
+#if defined(ORION_GLES)
+    if (!GLGrayscaleActive())
+#endif
+        glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);

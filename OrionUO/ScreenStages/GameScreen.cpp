@@ -1674,7 +1674,11 @@ void CGameScreen::DrawTouchStick()
 
         g_TouchStick.ButtonRadius = (int)(warButton->Width * scale) / 2;
 
-        glColor4f(1.0f, 1.0f, 1.0f, g_TouchStick.ButtonHeld ? 1.0f : 0.85f);
+        // Tinted green while it is being carried, the way the ring's knob is.
+        if (g_TouchStick.ButtonMoving)
+            glColor4f(0.55f, 1.0f, 0.55f, 1.0f);
+        else
+            glColor4f(1.0f, 1.0f, 1.0f, g_TouchStick.ButtonHeld ? 1.0f : 0.85f);
 
         g_GLMatrix.Push();
         g_GLMatrix.Translate((float)g_TouchStick.ButtonX, (float)g_TouchStick.ButtonY, 0.0f);

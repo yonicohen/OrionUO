@@ -797,12 +797,27 @@ struct
     bool RightDown = false;
     bool Moving = false;
     uint DownTicks = 0;
+    // Where the finger landed and where it is now, so a hold can be told from
+    // a push without needing it on the exact centre of the ring.
+    WISP_GEOMETRY::CPoint2Di DownAt;
+    WISP_GEOMETRY::CPoint2Di CurrentAt;
 } g_Stick;
+
+// The war toggle's own finger, tracked the same way: held still it toggles on
+// release, dragged it carries the button somewhere else.
+struct
+{
+    bool Moving = false;
+    WISP_GEOMETRY::CPoint2Di DownAt;
+} g_Button;
 
 // Where the ring has been dragged to, as a fraction of the window so it keeps
 // its place across a rotation. Negative means "never moved, use the default".
 float g_StickPlaceX = -1.0f;
 float g_StickPlaceY = -1.0f;
+// Same for the war toggle, which used to be pinned above the ring.
+float g_ButtonPlaceX = -1.0f;
+float g_ButtonPlaceY = -1.0f;
 bool g_StickPlaceLoaded = false;
 SDL_FingerID g_ButtonFinger = 0;
 // When a finger event last arrived; the stale-press watchdog goes by this.
@@ -973,6 +988,15 @@ static void LoadTouchStickPlacement()
     {
         g_StickPlaceX = x;
         g_StickPlaceY = y;
+
+        // Written by a later version; a file with only the ring in it leaves
+        // the button where it has always been, just above the ring.
+        if (fscanf(file, "%f %f", &x, &y) == 2 && x >= 0.0f && x <= 1.0f && y >= 0.0f &&
+            y <= 1.0f)
+        {
+            g_ButtonPlaceX = x;
+            g_ButtonPlaceY = y;
+        }
     }
 
     fclose(file);
@@ -985,6 +1009,7 @@ static void SaveTouchStickPlacement()
         return;
 
     fprintf(file, "%.4f %.4f\n", g_StickPlaceX, g_StickPlaceY);
+    fprintf(file, "%.4f %.4f\n", g_ButtonPlaceX, g_ButtonPlaceY);
     fclose(file);
 }
 
@@ -1019,20 +1044,30 @@ static void UpdateTouchStickBounds()
     }
 
     g_TouchStick.ButtonRadius = g_TouchStick.Radius / 3;
-    g_TouchStick.ButtonX = g_TouchStick.CenterX;
-    g_TouchStick.ButtonY =
-        g_TouchStick.CenterY - g_TouchStick.Radius - g_TouchStick.ButtonRadius - 14;
 
-    // Flipped below the ring if there is no room above it.
-    if (g_TouchStick.ButtonY - g_TouchStick.ButtonRadius < 0)
+    if (g_ButtonPlaceX >= 0.0f)
     {
+        g_TouchStick.ButtonX = (int)(g_ButtonPlaceX * size.Width);
+        g_TouchStick.ButtonY = (int)(g_ButtonPlaceY * size.Height);
+    }
+    else
+    {
+        g_TouchStick.ButtonX = g_TouchStick.CenterX;
         g_TouchStick.ButtonY =
-            g_TouchStick.CenterY + g_TouchStick.Radius + g_TouchStick.ButtonRadius + 14;
+            g_TouchStick.CenterY - g_TouchStick.Radius - g_TouchStick.ButtonRadius - 14;
+
+        // Flipped below the ring if there is no room above it.
+        if (g_TouchStick.ButtonY - g_TouchStick.ButtonRadius < 0)
+        {
+            g_TouchStick.ButtonY =
+                g_TouchStick.CenterY + g_TouchStick.Radius + g_TouchStick.ButtonRadius + 14;
+        }
     }
 
     g_TouchStick.Visible = (g_GameState >= GS_GAME);
     g_TouchStick.Active = g_Stick.Active;
     g_TouchStick.Moving = g_Stick.Moving;
+    g_TouchStick.ButtonMoving = g_Button.Moving;
 }
 
 // Drops the ring wherever the finger is, kept fully on screen.
@@ -1060,6 +1095,33 @@ static void TouchStickPlaceAt(const WISP_GEOMETRY::CPoint2Di &at)
     g_TouchStick.CenterY = y;
     g_StickPlaceX = (float)x / (float)size.Width;
     g_StickPlaceY = (float)y / (float)size.Height;
+}
+
+// Drops the war toggle wherever the finger is, kept fully on screen.
+static void TouchButtonPlaceAt(const WISP_GEOMETRY::CPoint2Di &at)
+{
+    if (g_WispWindow == nullptr)
+        return;
+
+    const WISP_GEOMETRY::CSize size = g_WispWindow->GetSize();
+    const int edge = g_TouchStick.ButtonRadius + 4;
+
+    int x = at.X;
+    int y = at.Y;
+
+    if (x < edge)
+        x = edge;
+    if (y < edge)
+        y = edge;
+    if (x > size.Width - edge)
+        x = size.Width - edge;
+    if (y > size.Height - edge)
+        y = size.Height - edge;
+
+    g_TouchStick.ButtonX = x;
+    g_TouchStick.ButtonY = y;
+    g_ButtonPlaceX = (float)x / (float)size.Width;
+    g_ButtonPlaceY = (float)y / (float)size.Height;
 }
 
 // Walks in the direction the knob is pushed.
@@ -1146,6 +1208,29 @@ static bool TouchStickCentred()
 
     return deflection * g_TouchStick.Radius < StickDeadZone;
 }
+//----------------------------------------------------------------------------------
+// Resting rather than steering, for the hold that picks the ring up. A thumb
+// held still anywhere off centre is a request to keep walking that way, so this
+// cannot simply ask whether the finger has moved - but the dead zone that marks
+// a step as "not walking" is six pixels across, which is no target at all to aim
+// a thumb at deliberately. The inner third of the ring is.
+static bool TouchStickIdle()
+{
+    const float deflection =
+        sqrtf(g_TouchStick.OffsetX * g_TouchStick.OffsetX +
+              g_TouchStick.OffsetY * g_TouchStick.OffsetY);
+
+    if (deflection >= 1.0f / 3.0f)
+        return false;
+
+    // And it has not been pushed at all since it landed. Steering means moving
+    // the thumb out from where it went down, so a finger that has not moved is
+    // not steering however close to the centre a resting thumb happens to sit.
+    const int dx = g_Stick.CurrentAt.X - g_Stick.DownAt.X;
+    const int dy = g_Stick.CurrentAt.Y - g_Stick.DownAt.Y;
+
+    return (dx * dx + dy * dy < TouchSlop * TouchSlop);
+}
 #endif
 //----------------------------------------------------------------------------------
 void CWindow::ProcessTouch()
@@ -1157,9 +1242,12 @@ void CWindow::ProcessTouch()
     // poll, and a finger held still on the ring sends no events.
     if (g_Stick.Active)
     {
-        // Held still in the middle rather than pushed: the thumb is not
-        // steering, so take it as a request to put the ring somewhere else.
-        if (!g_Stick.Moving && TouchStickCentred() &&
+        // Held still rather than pushed: the thumb is not steering, so take it
+        // as a request to put the ring somewhere else. This used to ask for the
+        // finger to be within the dead zone of the exact centre, which is a six
+        // pixel target and was all but impossible to hit on purpose. What it
+        // needs to know is only that the finger has not moved.
+        if (!g_Stick.Moving && TouchStickIdle() &&
             SDL_GetTicks() - g_Stick.DownTicks >= StickMoveDelay)
         {
             g_Stick.Moving = true;
@@ -1208,6 +1296,7 @@ void CWindow::ProcessTouch()
         g_Stick.RightDown = false;
         g_Stick.Moving = false;
         g_TouchStick.ButtonHeld = false;
+        g_Button.Moving = false;
         g_TouchStick.OffsetX = 0.0f;
         g_TouchStick.OffsetY = 0.0f;
     }
@@ -1345,6 +1434,8 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
                 if (dx * dx + dy * dy <= reach * reach)
                 {
                     g_TouchStick.ButtonHeld = true;
+                    g_Button.Moving = false;
+                    g_Button.DownAt = down;
                     g_ButtonFinger = ev.tfinger.fingerId;
                     break;
                 }
@@ -1366,6 +1457,8 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
                     g_Stick.RightDown = false;
                     g_Stick.Moving = false;
                     g_Stick.DownTicks = SDL_GetTicks();
+                    g_Stick.DownAt = down;
+                    g_Stick.CurrentAt = down;
                     TouchStickSetFrom(down);
                     break;
                 }
@@ -1405,9 +1498,33 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
         case SDL_FINGERMOTION:
         {
             g_LastTouchEventTicks = SDL_GetTicks();
+
+            // The toggle has nothing to do with a drag, so dragging it is what
+            // moves it: press and release to switch war mode, press and slide
+            // to carry the button somewhere else.
+            if (g_TouchStick.ButtonHeld && ev.tfinger.fingerId == g_ButtonFinger)
+            {
+                const WISP_GEOMETRY::CPoint2Di at = TouchToWindow(ev.tfinger.x, ev.tfinger.y);
+
+                if (!g_Button.Moving)
+                {
+                    const int dx = at.X - g_Button.DownAt.X;
+                    const int dy = at.Y - g_Button.DownAt.Y;
+
+                    if (dx * dx + dy * dy < TouchSlop * TouchSlop)
+                        break;
+
+                    g_Button.Moving = true;
+                }
+
+                TouchButtonPlaceAt(at);
+                break;
+            }
+
             if (g_Stick.Active && ev.tfinger.fingerId == g_Stick.Finger)
             {
                 const WISP_GEOMETRY::CPoint2Di at = TouchToWindow(ev.tfinger.x, ev.tfinger.y);
+                g_Stick.CurrentAt = at;
 
                 if (g_Stick.Moving)
                     TouchStickPlaceAt(at);
@@ -1447,7 +1564,15 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
             if (g_TouchStick.ButtonHeld && ev.tfinger.fingerId == g_ButtonFinger)
             {
                 g_TouchStick.ButtonHeld = false;
-                g_Orion.ChangeWarmode(0xFF);
+
+                if (g_Button.Moving)
+                {
+                    g_Button.Moving = false;
+                    SaveTouchStickPlacement();
+                }
+                else
+                    g_Orion.ChangeWarmode(0xFF);
+
                 break;
             }
 

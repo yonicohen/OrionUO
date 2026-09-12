@@ -46,6 +46,11 @@ static const float GrayLuminance[3] = { 0.299f, 0.587f, 0.114f };
 static GLuint g_GrayDummyTexture = 0;
 static bool g_GrayscaleActive = false;
 
+bool GLGrayscaleActive()
+{
+    return g_GrayscaleActive;
+}
+
 static void EndGrayscale()
 {
     if (!g_GrayscaleActive)

@@ -28,12 +28,15 @@ struct CTouchStick
     float OffsetX = 0.0f;
     float OffsetY = 0.0f;
 
-    // War/peace toggle, parked just above the ring. UO puts this on the
-    // paperdoll, which is a long reach from a thumb on the stick.
+    // War/peace toggle. It starts just above the ring - UO puts this on the
+    // paperdoll, which is a long reach from a thumb on the stick - but it has
+    // its own placement once it has been carried anywhere.
     int ButtonX = 0;
     int ButtonY = 0;
     int ButtonRadius = 0;
     bool ButtonHeld = false;
+    // Being carried to a new spot rather than pressed.
+    bool ButtonMoving = false;
 };
 extern CTouchStick g_TouchStick;
 //----------------------------------------------------------------------------------

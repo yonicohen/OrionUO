@@ -138,6 +138,31 @@ void CGump::FixCoordinates()
     }
 }
 //---------------------------------------------------------------------------
+float CGump::InterfaceScale() const
+{
+#if defined(__ANDROID__)
+    // The screen gumps are the login, character list and the frame the world is
+    // drawn in: they are laid out against the window itself and have to stay at
+    // its own scale. Everything else is a floating panel of UO art, sized for a
+    // monitor, and on a phone the buttons on it are a couple of millimetres
+    // across.
+    if (GumpType == GT_NONE)
+        return 1.0f;
+
+    const WISP_GEOMETRY::CSize size = g_OrionWindow.GetSize();
+    float scale = size.Height / 800.0f;
+
+    if (scale < 1.0f)
+        scale = 1.0f;
+    else if (scale > 2.0f)
+        scale = 2.0f;
+
+    return scale;
+#else
+    return 1.0f;
+#endif
+}
+//---------------------------------------------------------------------------
 bool CGump::CanBeMoved()
 {
     WISPFUN_DEBUG("c84_f2");
@@ -1427,6 +1452,21 @@ void CGump::Draw()
     GLfloat posX = g_GumpTranslate.X;
     GLfloat posY = g_GumpTranslate.Y;
 
+    // The gump's own coordinates, GumpRect included, are what the scale applies
+    // to - so the origin it is measured from is the translate alone, which is
+    // also what CGump::Select divides the cursor by.
+    const float scale = InterfaceScale();
+    const bool scaled = (scale != 1.0f);
+
+    if (scaled)
+    {
+        g_GLMatrix.Translate(g_GumpTranslate.X, g_GumpTranslate.Y, 0.0f);
+        g_GLMatrix.Scale(scale, scale, 1.0f);
+
+        posX -= g_GumpTranslate.X;
+        posY -= g_GumpTranslate.Y;
+    }
+
     if (!g_ConfigManager.GetUseGLListsForInterface())
     {
         posX += (GLfloat)GumpRect.Position.X;
@@ -1457,6 +1497,12 @@ void CGump::Draw()
     DrawLocker();
 
     g_GLMatrix.Translate(-posX, -posY, 0.0f);
+
+    if (scaled)
+    {
+        g_GLMatrix.Scale(1.0f / scale, 1.0f / scale, 1.0f);
+        g_GLMatrix.Translate(-g_GumpTranslate.X, -g_GumpTranslate.Y, 0.0f);
+    }
 }
 //----------------------------------------------------------------------------------
 CRenderObject *CGump::Select()
@@ -1473,9 +1519,12 @@ CRenderObject *CGump::Select()
         FrameCreated = false;
     }
 
+    const float scale = InterfaceScale();
+
     WISP_GEOMETRY::CPoint2Di oldPos = g_MouseManager.Position;
     g_MouseManager.Position = WISP_GEOMETRY::CPoint2Di(
-        oldPos.X - (int)g_GumpTranslate.X, oldPos.Y - (int)g_GumpTranslate.Y);
+        (int)((oldPos.X - g_GumpTranslate.X) / scale),
+        (int)((oldPos.Y - g_GumpTranslate.Y) / scale));
 
     CRenderObject *selected = NULL;
 

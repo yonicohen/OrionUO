@@ -128,6 +128,11 @@ public:
 
     bool CanBeMoved();
 
+    // How much bigger than its art this gump is drawn. One everywhere but
+    // Android, where UO's interface is built for a 640x480 screen and a phone
+    // has four times the pixels across the same hand-sized piece of glass.
+    float InterfaceScale() const;
+
     void DrawLocker();
 
     bool SelectLocker();
