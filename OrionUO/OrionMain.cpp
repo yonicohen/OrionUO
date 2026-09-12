@@ -163,6 +163,30 @@ int main(int argc, char **argv)
     }
     SDL_Log("SDL Initialized.");
 
+#if defined(ORION_IOS)
+    // Same problem as Android and a different answer: an iOS app is sandboxed
+    // and starts wherever the system feels like, so the working directory is no
+    // use either. The data goes in the app's Documents directory, which is the
+    // one the Files app and Finder's file sharing can write into - there is no
+    // adb push here, so it has to be somewhere a person can reach.
+    //
+    // HOME is the sandbox container, which is how every iOS process finds its
+    // own storage; SDL has no call for Documents specifically.
+    {
+        const char *home = getenv("HOME");
+
+        if (home != nullptr)
+        {
+            const os_path documents = os_path(home) + PATH_SEP + ToPath("Documents");
+
+            g_App.m_UOPath = g_App.m_ExePath = documents;
+            g_MainScreen.LoadCustomPath();
+
+            LOG("iOS data path: %s\n", CStringFromPath(g_App.m_UOPath));
+        }
+    }
+#endif
+
 #if defined(__ANDROID__)
     // Android starts the process at '/', so the working directory CApplication
     // picked up is useless. The data lives in app storage instead.
