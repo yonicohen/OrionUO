@@ -139,6 +139,7 @@ using namespace std;
 #include "GLEngine/GLTextTexture.h"
 #include "GLEngine/GLHTMLTextTexture.h"
 #include "GLEngine/GLTextureCircleOfTransparency.h"
+#include "GLEngine/GLVertexBatchShader.h"
 #include "GLEngine/GLShader.h"
 #include "GLEngine/GLVector.h"
 #include "GLEngine/GLFrameBuffer.h"

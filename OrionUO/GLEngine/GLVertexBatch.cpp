@@ -203,6 +203,16 @@ void CGLVertexBatch::End()
     if (count == 0)
         return;
 
+#if defined(ORION_GLES)
+    // The client's own shaders are programs here rather than something bound
+    // over the fixed function pipeline, so the batch draws through them too -
+    // it just swaps which program is current.
+    if (UseShaders && g_GLBatchShader.Available())
+    {
+        DrawWithShader(count);
+        return;
+    }
+#else
     // Not while one of the client's own shaders is bound. Binding ours over the
     // top of the colorizer or the death shader is what left the world unhued and
     // a ghost looking at it in full colour; those shaders are written against the
@@ -212,6 +222,7 @@ void CGLVertexBatch::End()
         DrawWithShader(count);
         return;
     }
+#endif
 
 #if defined(ORION_GLES)
     // There is no fixed function path to fall back to: if the shader is gone,

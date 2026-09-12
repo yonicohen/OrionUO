@@ -134,71 +134,112 @@ GLuint CGLVertexBatchShader::CompileStage(GLenum type, const char *source)
     return stage;
 }
 //----------------------------------------------------------------------------------
+const char *CGLVertexBatchShader::VertexSource()
+{
+    return s_VertexShader;
+}
+//----------------------------------------------------------------------------------
+bool SGLProgram::Build(const char *vertex, const char *fragment)
+{
+    Free();
+
+    GLuint vertexStage = CGLVertexBatchShader::CompileStage(GL_VERTEX_SHADER, vertex);
+    if (vertexStage == 0)
+        return false;
+
+    GLuint fragmentStage = CGLVertexBatchShader::CompileStage(GL_FRAGMENT_SHADER, fragment);
+    if (fragmentStage == 0)
+    {
+        glDeleteShader(vertexStage);
+        return false;
+    }
+
+    Program = glCreateProgram();
+    glAttachShader(Program, vertexStage);
+    glAttachShader(Program, fragmentStage);
+    glLinkProgram(Program);
+
+    // The program holds its own references once linked.
+    glDeleteShader(vertexStage);
+    glDeleteShader(fragmentStage);
+
+    GLint linked = GL_FALSE;
+    glGetProgramiv(Program, GL_LINK_STATUS, &linked);
+
+    if (linked != GL_TRUE)
+    {
+        char log[1024] = { 0 };
+        glGetProgramInfoLog(Program, sizeof(log) - 1, nullptr, log);
+        LOG("SGLProgram: link failed: %s\n", log);
+        Free();
+        return false;
+    }
+
+    AttribPosition = glGetAttribLocation(Program, "a_position");
+    AttribTexCoord = glGetAttribLocation(Program, "a_texcoord");
+    AttribColor = glGetAttribLocation(Program, "a_color");
+    AttribNormal = glGetAttribLocation(Program, "a_normal");
+
+    UniformTransform = glGetUniformLocation(Program, "u_transform");
+    UniformTexture = glGetUniformLocation(Program, "u_texture");
+    UniformTextured = glGetUniformLocation(Program, "u_textured");
+    UniformSourceSize = glGetUniformLocation(Program, "u_sourceSize");
+    UniformLighting = glGetUniformLocation(Program, "u_lighting");
+    UniformLightDirection = glGetUniformLocation(Program, "u_lightDirection");
+    UniformLightConstant = glGetUniformLocation(Program, "u_lightConstant");
+    UniformLightDiffuse = glGetUniformLocation(Program, "u_lightDiffuse");
+
+    UniformDrawMode = glGetUniformLocation(Program, "u_drawMode");
+    UniformColors = glGetUniformLocation(Program, "u_colors");
+
+    return (AttribPosition >= 0 && UniformTransform >= 0);
+}
+//----------------------------------------------------------------------------------
+void SGLProgram::Free()
+{
+    if (Program != 0)
+    {
+        glDeleteProgram(Program);
+        Program = 0;
+    }
+}
+//----------------------------------------------------------------------------------
+void CGLVertexBatchShader::SetProgram(const SGLProgram *program)
+{
+    const SGLProgram *wanted = (program != nullptr) ? program : &m_Default;
+
+    if (wanted == m_Active)
+        return;
+
+    m_Active = wanted;
+
+    // Everything cached describes the program that was bound a moment ago.
+    InvalidateState();
+}
+//----------------------------------------------------------------------------------
 bool CGLVertexBatchShader::Init()
 {
     Free();
 
-    GLuint vertex = CompileStage(GL_VERTEX_SHADER, s_VertexShader);
-    if (vertex == 0)
+    if (!m_Default.Build(s_VertexShader, s_FragmentShader))
         return false;
 
-    GLuint fragment = CompileStage(GL_FRAGMENT_SHADER, s_FragmentShader);
-    if (fragment == 0)
-    {
-        glDeleteShader(vertex);
-        return false;
-    }
+    m_Active = &m_Default;
 
-    m_Program = glCreateProgram();
-    glAttachShader(m_Program, vertex);
-    glAttachShader(m_Program, fragment);
-    glLinkProgram(m_Program);
-
-    // The program holds its own references once linked.
-    glDeleteShader(vertex);
-    glDeleteShader(fragment);
-
-    GLint linked = GL_FALSE;
-    glGetProgramiv(m_Program, GL_LINK_STATUS, &linked);
-    if (linked != GL_TRUE)
-    {
-        char log[1024] = { 0 };
-        glGetProgramInfoLog(m_Program, sizeof(log) - 1, nullptr, log);
-        LOG("CGLVertexBatchShader: link failed: %s\n", log);
-        Free();
-        return false;
-    }
-
-    m_AttribPosition = glGetAttribLocation(m_Program, "a_position");
-    m_AttribTexCoord = glGetAttribLocation(m_Program, "a_texcoord");
-    m_AttribColor = glGetAttribLocation(m_Program, "a_color");
-    m_AttribNormal = glGetAttribLocation(m_Program, "a_normal");
-    m_UniformTransform = glGetUniformLocation(m_Program, "u_transform");
-    m_UniformTexture = glGetUniformLocation(m_Program, "u_texture");
-    m_UniformTextured = glGetUniformLocation(m_Program, "u_textured");
-    m_UniformSourceSize = glGetUniformLocation(m_Program, "u_sourceSize");
-    m_UniformLighting = glGetUniformLocation(m_Program, "u_lighting");
-    m_UniformLightDirection = glGetUniformLocation(m_Program, "u_lightDirection");
-    m_UniformLightConstant = glGetUniformLocation(m_Program, "u_lightConstant");
-    m_UniformLightDiffuse = glGetUniformLocation(m_Program, "u_lightDiffuse");
-
-    if (m_AttribPosition < 0 || m_UniformTransform < 0)
-    {
-        LOG("CGLVertexBatchShader: program is missing expected inputs\n");
-        Free();
-        return false;
-    }
-
+#if !defined(ORION_GLES)
     glGenBuffers(1, &m_VertexBuffer);
+
     if (m_VertexBuffer == 0)
     {
         LOG("CGLVertexBatchShader: could not create a vertex buffer\n");
         Free();
         return false;
     }
+#endif
 
     m_Available = true;
     LOG("CGLVertexBatchShader: ready\n");
+
     return true;
 }
 //----------------------------------------------------------------------------------
@@ -210,11 +251,8 @@ void CGLVertexBatchShader::Free()
         m_VertexBuffer = 0;
     }
 
-    if (m_Program != 0)
-    {
-        glDeleteProgram(m_Program);
-        m_Program = 0;
-    }
+    m_Default.Free();
+    m_Active = &m_Default;
 
     m_Available = false;
 }
@@ -295,10 +333,10 @@ void CGLVertexBatchShader::Draw(
     // glGetFloatv calls per draw - a pipeline stall each, on every gump and tile.
     if (!m_StateBound)
     {
-        glUseProgram(m_Program);
+        glUseProgram(m_Active->Program);
 
-        if (m_UniformTexture >= 0)
-            glUniform1i(m_UniformTexture, 0);
+        if (m_Active->UniformTexture >= 0)
+            glUniform1i(m_Active->UniformTexture, 0);
     }
 
     float transform[16] = {};
@@ -308,18 +346,18 @@ void CGLVertexBatchShader::Draw(
     {
         memcpy(m_LastTransform, transform, sizeof(transform));
         m_HaveLastTransform = true;
-        glUniformMatrix4fv(m_UniformTransform, 1, GL_FALSE, transform);
+        glUniformMatrix4fv(m_Active->UniformTransform, 1, GL_FALSE, transform);
     }
 
     const int texturedValue = textured ? 1 : 0;
 
-    if (m_UniformTextured >= 0 && texturedValue != m_LastTextured)
+    if (m_Active->UniformTextured >= 0 && texturedValue != m_LastTextured)
     {
         m_LastTextured = texturedValue;
-        glUniform1i(m_UniformTextured, texturedValue);
+        glUniform1i(m_Active->UniformTextured, texturedValue);
     }
 
-    if (m_UniformSourceSize >= 0)
+    if (m_Active->UniformSourceSize >= 0)
     {
         // Zero disables texel-space filtering in the shader, leaving plain bilinear.
         const bool sharp = g_SharpFilter;
@@ -330,25 +368,25 @@ void CGLVertexBatchShader::Draw(
         {
             m_LastSourceSize[0] = width;
             m_LastSourceSize[1] = height;
-            glUniform2f(m_UniformSourceSize, width, height);
+            glUniform2f(m_Active->UniformSourceSize, width, height);
         }
     }
 
     const int lightingValue = lit ? 1 : 0;
 
-    if (m_UniformLighting >= 0 && lightingValue != m_LastLighting)
+    if (m_Active->UniformLighting >= 0 && lightingValue != m_LastLighting)
     {
         if (lit && !m_LightingCached)
             CacheLightingState();
 
         m_LastLighting = lightingValue;
-        glUniform1i(m_UniformLighting, lightingValue);
+        glUniform1i(m_Active->UniformLighting, lightingValue);
 
         if (lit)
         {
-            glUniform3fv(m_UniformLightDirection, 1, m_LightDirection);
-            glUniform3fv(m_UniformLightConstant, 1, m_LightConstant);
-            glUniform3fv(m_UniformLightDiffuse, 1, m_LightDiffuse);
+            glUniform3fv(m_Active->UniformLightDirection, 1, m_LightDirection);
+            glUniform3fv(m_Active->UniformLightConstant, 1, m_LightConstant);
+            glUniform3fv(m_Active->UniformLightDiffuse, 1, m_LightDiffuse);
         }
     }
 
@@ -384,28 +422,28 @@ void CGLVertexBatchShader::BindState(const float *vertices, GLsizei stride, int 
     m_LastStride = stride;
     m_LastVertices = vertices;
 
-    glEnableVertexAttribArray(m_AttribPosition);
-    glVertexAttribPointer(m_AttribPosition, 2, GL_FLOAT, GL_FALSE, stride, base);
+    glEnableVertexAttribArray(m_Active->AttribPosition);
+    glVertexAttribPointer(m_Active->AttribPosition, 2, GL_FLOAT, GL_FALSE, stride, base);
 
-    if (m_AttribTexCoord >= 0)
+    if (m_Active->AttribTexCoord >= 0)
     {
-        glEnableVertexAttribArray(m_AttribTexCoord);
+        glEnableVertexAttribArray(m_Active->AttribTexCoord);
         glVertexAttribPointer(
-            m_AttribTexCoord, 2, GL_FLOAT, GL_FALSE, stride, base + 2 * sizeof(float));
+            m_Active->AttribTexCoord, 2, GL_FLOAT, GL_FALSE, stride, base + 2 * sizeof(float));
     }
 
-    if (m_AttribColor >= 0)
+    if (m_Active->AttribColor >= 0)
     {
-        glEnableVertexAttribArray(m_AttribColor);
+        glEnableVertexAttribArray(m_Active->AttribColor);
         glVertexAttribPointer(
-            m_AttribColor, 4, GL_FLOAT, GL_FALSE, stride, base + 4 * sizeof(float));
+            m_Active->AttribColor, 4, GL_FLOAT, GL_FALSE, stride, base + 4 * sizeof(float));
     }
 
-    if (m_AttribNormal >= 0)
+    if (m_Active->AttribNormal >= 0)
     {
-        glEnableVertexAttribArray(m_AttribNormal);
+        glEnableVertexAttribArray(m_Active->AttribNormal);
         glVertexAttribPointer(
-            m_AttribNormal, 3, GL_FLOAT, GL_FALSE, stride, base + 8 * sizeof(float));
+            m_Active->AttribNormal, 3, GL_FLOAT, GL_FALSE, stride, base + 8 * sizeof(float));
     }
 
     m_StateBound = true;

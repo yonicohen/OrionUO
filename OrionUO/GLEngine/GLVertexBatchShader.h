@@ -22,28 +22,51 @@
 #ifndef GLVERTEXBATCHSHADER_H
 #define GLVERTEXBATCHSHADER_H
 //----------------------------------------------------------------------------------
+// One compiled program and where everything in it lives. The default program is
+// one of these; so is each of the client's own shaders, which differ only in
+// their fragment stage and are drawn through exactly the same attributes.
+struct SGLProgram
+{
+    GLuint Program = 0;
+
+    GLint AttribPosition = -1;
+    GLint AttribTexCoord = -1;
+    GLint AttribColor = -1;
+    GLint AttribNormal = -1;
+
+    GLint UniformTransform = -1;
+    GLint UniformTexture = -1;
+    GLint UniformTextured = -1;
+    GLint UniformSourceSize = -1;
+    GLint UniformLighting = -1;
+    GLint UniformLightDirection = -1;
+    GLint UniformLightConstant = -1;
+    GLint UniformLightDiffuse = -1;
+
+    // The client's shaders take two more: which of its drawing modes this is,
+    // and the hue table to look a colour up in.
+    GLint UniformDrawMode = -1;
+    GLint UniformColors = -1;
+
+    // Compiles and links, and finds everything above. The vertex stage is always
+    // the batch's own - see CGLVertexBatchShader::VertexSource.
+    bool Build(const char *vertex, const char *fragment);
+    void Free();
+};
+//----------------------------------------------------------------------------------
 class CGLVertexBatchShader
 {
 private:
-    GLuint m_Program = 0;
+    SGLProgram m_Default;
+
+    // What is being drawn with. The default, unless the client has bound one of
+    // its own over the top.
+    const SGLProgram *m_Active = nullptr;
+
     GLuint m_VertexBuffer = 0;
-
-    GLint m_AttribPosition = -1;
-    GLint m_AttribTexCoord = -1;
-    GLint m_AttribColor = -1;
-    GLint m_AttribNormal = -1;
-
-    GLint m_UniformTransform = -1;
-    GLint m_UniformTexture = -1;
-    GLint m_UniformTextured = -1;
-    GLint m_UniformSourceSize = -1;
 
     int m_SourceWidth = 0;
     int m_SourceHeight = 0;
-    GLint m_UniformLighting = -1;
-    GLint m_UniformLightDirection = -1;
-    GLint m_UniformLightConstant = -1;
-    GLint m_UniformLightDiffuse = -1;
 
     // Light and material never change after start-up, so they are read back once.
     bool m_LightingCached = false;
@@ -70,9 +93,11 @@ private:
 
     void BindState(const float *vertices, GLsizei stride, int vertexCount);
 
-    static GLuint CompileStage(GLenum type, const char *source);
+
 
 public:
+    static GLuint CompileStage(GLenum type, const char *source);
+
     CGLVertexBatchShader() {}
     ~CGLVertexBatchShader() {}
 
@@ -82,6 +107,14 @@ public:
     void Free();
 
     bool Available() const { return m_Available; }
+
+    // The vertex stage every program here shares, so the client's shaders draw
+    // through the same attributes as everything else.
+    static const char *VertexSource();
+
+    // Draw with one of the client's own programs instead of the default. Passing
+    // nullptr goes back to the default.
+    void SetProgram(const SGLProgram *program);
 
     // Forgets what it believes GL is set to. Called when anything outside this
     // class may have changed the program, the buffer or the attribute arrays.

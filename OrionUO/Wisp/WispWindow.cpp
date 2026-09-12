@@ -1013,13 +1013,13 @@ void CWindow::UpdateTextInput(bool wanted)
     // immersive mode to find somewhere to appear, and it carries the chat modes.
     // Something taking focus opens it - once, on the change, so that closing it
     // while a field is still focused does not reopen it every frame.
-    // Three ways to ask for it, because one is not enough: something became
-    // focused when nothing was, focus moved to a different field, or a field was
-    // tapped. The last matters most - on the login screen a field is focused
-    // before the screen is even drawn, so waiting for a change meant the
-    // keyboard opened once at start-up and never again.
-    const bool changed = (wanted != m_TextInputActive);
-    const bool focusMoved = (g_EntryPointer != m_LastTextEntry);
+    // Tapping a field is the only thing that opens it. Anything cleverer than
+    // that was wrong in one direction or the other: waiting for something to
+    // become focused never fired on the login screen, where a field is focused
+    // before the screen is drawn, and watching focus move fired on the character
+    // list, which moves it on arrival and wants no keyboard at all.
+    //
+    // A person tapping a text field is unambiguous. Nothing else is.
     const bool tappedField = m_TextInputDirty && m_TappedTextEntry;
 
     m_TextInputActive = wanted;
@@ -1027,7 +1027,7 @@ void CWindow::UpdateTextInput(bool wanted)
     m_TextInputDirty = false;
     m_TappedTextEntry = false;
 
-    if (wanted && g_GumpKeyboard == NULL && (changed || focusMoved || tappedField))
+    if (wanted && tappedField && g_GumpKeyboard == NULL)
         ToggleKeyboardGump();
 #else
     (void)wanted;

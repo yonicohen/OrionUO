@@ -42,6 +42,12 @@ protected:
     //Указатель на текстуру для передачи ее шейдеру (можно не использовать, текстура передается автоматически при glBingTexture)
     GLuint m_TexturePointer{ 0 };
 
+#if defined(ORION_GLES)
+    // The same shader as a GLES program: the batch's vertex stage with this
+    // shader's fragment stage, drawn through the batch's own attributes.
+    SGLProgram m_GLESProgram;
+#endif
+
 public:
     CGLShader();
     virtual ~CGLShader();

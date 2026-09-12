@@ -18,20 +18,135 @@ CColorizerShader g_LightColorizerShader;
 //----------------------------------------------------------------------------------
 #ifdef ORION_GLES
 //----------------------------------------------------------------------------------
-// The client's own shaders - hue colourisation, the death greyscale, lighting -
-// are written against the fixed function pipeline: they read gl_TexCoord and
-// gl_Color and are bound over whatever the renderer is already doing. GLES 2.0
-// has neither, so on this platform they are programs sharing the batch's vertex
-// shader and its attribute layout, swapped in place of the default one.
+// The client's own shaders, rewritten for GLES.
 //
-// Until they are, they are inert: Init() fails, Use() returns false, and the
-// batch draws with its own program.
+// The desktop versions are written against the fixed function pipeline: they
+// read gl_TexCoord and gl_Color and are bound over whatever the renderer is
+// already doing. GLES 2.0 has neither, so these share the batch's vertex stage
+// and its attributes, and are swapped in as the program it draws with.
+//
+// What they do is unchanged, because what they do is the game: mode 1 looks a
+// texel's red channel up in the hue table, which is how every coloured item,
+// robe and weapon in UO gets its colour; modes above 5 shade land by its normal;
+// and the death shader drains it all to grey.
+//----------------------------------------------------------------------------------
+namespace
+{
+const char *g_Precision = "precision mediump float;\n";
+
+const char *g_ColorizerFragment =
+    "uniform sampler2D u_texture;\n"
+    "uniform int u_textured;\n"
+    "uniform int u_drawMode;\n"
+    "uniform float u_colors[96];\n"
+    "varying vec2 v_texcoord;\n"
+    "varying vec4 v_color;\n"
+    "void main()\n"
+    "{\n"
+    "    vec4 texel = texture2D(u_texture, v_texcoord);\n"
+    "    if (texel.a == 0.0)\n"
+    "        discard;\n"
+    "    if (u_drawMode == 1 ||\n"
+    "        (u_drawMode == 2 && texel.r == texel.g && texel.r == texel.b))\n"
+    "    {\n"
+    "        int index = int(texel.r * 31.875) * 3;\n"
+    "        gl_FragColor = vec4(u_colors[index], u_colors[index + 1], u_colors[index + 2],\n"
+    "                            texel.a) * v_color;\n"
+    "    }\n"
+    "    else if (u_drawMode > 9)\n"
+    "    {\n"
+    "        float red = texel.r;\n"
+    "        if (u_drawMode > 11)\n"
+    "            red = 0.6;\n"
+    "        else if (u_drawMode > 10)\n"
+    "            red *= 0.5;\n"
+    "        else\n"
+    "            red *= 1.5;\n"
+    "        gl_FragColor = vec4(red, red, red, texel.a) * v_color;\n"
+    "    }\n"
+    "    else if (u_drawMode > 6)\n"
+    "    {\n"
+    "        int index = int(texel.r * 31.875) * 3;\n"
+    "        gl_FragColor = vec4(u_colors[index], u_colors[index + 1], u_colors[index + 2],\n"
+    "                            texel.a) * v_color;\n"
+    "    }\n"
+    "    else\n"
+    "        gl_FragColor = texel * v_color;\n"
+    "}\n";
+
+const char *g_DeathFragment =
+    "uniform sampler2D u_texture;\n"
+    "uniform int u_textured;\n"
+    "uniform int u_drawMode;\n"
+    "varying vec2 v_texcoord;\n"
+    "varying vec4 v_color;\n"
+    "void main()\n"
+    "{\n"
+    "    vec4 texel = texture2D(u_texture, v_texcoord);\n"
+    "    if (texel.a == 0.0)\n"
+    "        discard;\n"
+    "    float grey = texel.r * 0.6 + texel.g * 0.05;\n"
+    "    gl_FragColor = vec4(grey, grey, grey, texel.a);\n"
+    "}\n";
+
+const char *g_FontFragment =
+    "uniform sampler2D u_texture;\n"
+    "uniform int u_textured;\n"
+    "uniform int u_drawMode;\n"
+    "uniform float u_colors[96];\n"
+    "varying vec2 v_texcoord;\n"
+    "varying vec4 v_color;\n"
+    "void main()\n"
+    "{\n"
+    "    vec4 texel = texture2D(u_texture, v_texcoord);\n"
+    "    if (texel.a == 0.0)\n"
+    "        discard;\n"
+    "    if (u_drawMode == 1 ||\n"
+    "        (u_drawMode == 2 && texel.r == texel.g && texel.r == texel.b))\n"
+    "    {\n"
+    "        int index = int(texel.r * 31.875) * 3;\n"
+    "        gl_FragColor = vec4(u_colors[index], u_colors[index + 1], u_colors[index + 2],\n"
+    "                            texel.a) * v_color;\n"
+    "    }\n"
+    "    else if (u_drawMode == 4 || (u_drawMode == 3 && texel.r > 0.04))\n"
+    "    {\n"
+    "        gl_FragColor = vec4(u_colors[90], u_colors[91], u_colors[92], texel.a) * v_color;\n"
+    "    }\n"
+    "    else\n"
+    "        gl_FragColor = texel * v_color;\n"
+    "}\n";
+
+const char *g_LightFragment =
+    "uniform sampler2D u_texture;\n"
+    "uniform int u_textured;\n"
+    "uniform int u_drawMode;\n"
+    "uniform float u_colors[96];\n"
+    "varying vec2 v_texcoord;\n"
+    "varying vec4 v_color;\n"
+    "void main()\n"
+    "{\n"
+    "    vec4 texel = texture2D(u_texture, v_texcoord);\n"
+    "    if (texel.a != 0.0 && u_drawMode == 1)\n"
+    "    {\n"
+    "        int index = int(texel.r * 7.96875) * 3;\n"
+    "        gl_FragColor = (texel * vec4(u_colors[index], u_colors[index + 1],\n"
+    "                                     u_colors[index + 2], 1.0)) * 3.0;\n"
+    "    }\n"
+    "    else\n"
+    "        gl_FragColor = texel;\n"
+    "}\n";
+
+// Which fragment stage a shader gets is decided by the order they are created
+// in, which is the order COrion::Install builds them: colouriser, font, light.
+int g_ColorizerCount = 0;
+} // namespace
 //----------------------------------------------------------------------------------
 void UnuseShader()
 {
     ShaderColorTable = 0;
     g_ShaderDrawMode = 0;
     g_ClientShaderActive = false;
+    g_GLBatchShader.SetProgram(nullptr);
 }
 //----------------------------------------------------------------------------------
 CGLShader::CGLShader()
@@ -49,16 +164,32 @@ bool CGLShader::Init(const char * /*vertexShaderData*/, const char * /*fragmentS
 //----------------------------------------------------------------------------------
 bool CGLShader::Use()
 {
-    UnuseShader();
-    return false;
+    if (m_GLESProgram.Program == 0)
+    {
+        UnuseShader();
+        return false;
+    }
+
+    glUseProgram(m_GLESProgram.Program);
+
+    // The GUI sets these through the globals, on whatever program is current.
+    ShaderColorTable = m_GLESProgram.UniformColors;
+    g_ShaderDrawMode = m_GLESProgram.UniformDrawMode;
+    g_ClientShaderActive = true;
+
+    g_GLBatchShader.SetProgram(&m_GLESProgram);
+    return true;
 }
 //----------------------------------------------------------------------------------
 void CGLShader::Pause()
 {
+    g_GLBatchShader.SetProgram(nullptr);
 }
 //----------------------------------------------------------------------------------
 void CGLShader::Resume()
 {
+    if (m_GLESProgram.Program != 0)
+        g_GLBatchShader.SetProgram(&m_GLESProgram);
 }
 //----------------------------------------------------------------------------------
 CDeathShader::CDeathShader()
@@ -68,13 +199,13 @@ CDeathShader::CDeathShader()
 //----------------------------------------------------------------------------------
 bool CDeathShader::Init(const char * /*vertexShaderData*/, const char * /*fragmentShaderData*/)
 {
-    return false;
+    const string fragment = string(g_Precision) + g_DeathFragment;
+    return m_GLESProgram.Build(CGLVertexBatchShader::VertexSource(), fragment.c_str());
 }
 //----------------------------------------------------------------------------------
 bool CDeathShader::Use()
 {
-    UnuseShader();
-    return false;
+    return CGLShader::Use();
 }
 //----------------------------------------------------------------------------------
 CColorizerShader::CColorizerShader()
@@ -84,12 +215,22 @@ CColorizerShader::CColorizerShader()
 //----------------------------------------------------------------------------------
 bool CColorizerShader::Init(const char * /*vertexShaderData*/, const char * /*fragmentShaderData*/)
 {
-    return false;
+    const char *source = g_ColorizerFragment;
+
+    if (g_ColorizerCount == 1)
+        source = g_FontFragment;
+    else if (g_ColorizerCount >= 2)
+        source = g_LightFragment;
+
+    g_ColorizerCount++;
+
+    const string fragment = string(g_Precision) + source;
+    return m_GLESProgram.Build(CGLVertexBatchShader::VertexSource(), fragment.c_str());
 }
 //----------------------------------------------------------------------------------
 bool CColorizerShader::Use()
 {
-    return false;
+    return CGLShader::Use();
 }
 //----------------------------------------------------------------------------------
 #else
