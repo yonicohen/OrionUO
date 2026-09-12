@@ -16,6 +16,9 @@
 // The shader consults this to choose texel-space filtering over plain bilinear.
 // The client defines it in GLArtUpscale.cpp, which this test does not build.
 extern bool g_SharpFilter;
+// The batch defers to the client's own shaders when one is bound; the harness
+// never binds one, so the shader path is what gets compared.
+extern bool g_ClientShaderActive;
 
 #include "GLMatrixStack.h"
 #include "GLVertexBatchShader.h"
