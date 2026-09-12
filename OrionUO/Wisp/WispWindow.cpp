@@ -805,6 +805,8 @@ float g_StickPlaceX = -1.0f;
 float g_StickPlaceY = -1.0f;
 bool g_StickPlaceLoaded = false;
 SDL_FingerID g_ButtonFinger = 0;
+// When a finger event last arrived; the stale-press watchdog goes by this.
+uint g_LastTouchEventTicks = 0;
 
 // Where the stick sits, and how hard it has to be pushed. The ring is parked in
 // the bottom-left corner of the window, out of the way of the status bar and
@@ -1175,27 +1177,17 @@ void CWindow::ProcessTouch()
     // the system swallows - and the press then never ends: a dragged paperdoll
     // stayed stuck to the cursor and jumped to wherever was touched next.
     //
-    // Every touch device has to be counted, not just the first: asking only
-    // SDL_GetTouchDevice(0) read zero fingers while a finger was plainly down on
-    // another one, and the watchdog then cut every drag short. It also has to
-    // stay quiet for a moment first, so it cannot race the events it is there to
-    // back up.
-    int fingers = 0;
-    for (int device = 0; device < SDL_GetNumTouchDevices(); device++)
-        fingers += SDL_GetNumTouchFingers(SDL_GetTouchDevice(device));
-
+    // Asking SDL how many fingers are down turned out to be no way to tell. It
+    // reported an empty screen during a live drag, and the watchdog then cut the
+    // drag short after a fraction of a second - which is what made the status bar
+    // move a few pixels and snap back. Go by silence instead: a finger that is
+    // really there produces motion, and one whose lift was swallowed produces
+    // nothing at all. The timeout is long enough that no real drag reaches it.
     const bool holding = (g_Touch.Active || g_Touch.LeftDown || g_Touch.RightDown ||
                           g_Stick.Active || g_TouchStick.ButtonHeld);
 
-    static uint emptySince = 0;
-    if (fingers > 0 || !holding)
-        emptySince = 0;
-    else if (emptySince == 0)
-        emptySince = SDL_GetTicks();
-
-    if (holding && fingers == 0 && emptySince != 0 && SDL_GetTicks() - emptySince >= 250)
+    if (holding && SDL_GetTicks() - g_LastTouchEventTicks >= 3000)
     {
-        emptySince = 0;
 
         if (g_Touch.LeftDown)
             TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, g_Touch.Current);
@@ -1311,6 +1303,7 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
 #if defined(__ANDROID__)
         case SDL_FINGERDOWN:
         {
+            g_LastTouchEventTicks = SDL_GetTicks();
             const WISP_GEOMETRY::CPoint2Di down = TouchToWindow(ev.tfinger.x, ev.tfinger.y);
 
             // The war toggle sits beside the stick and takes precedence over it.
@@ -1382,6 +1375,7 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
 
         case SDL_FINGERMOTION:
         {
+            g_LastTouchEventTicks = SDL_GetTicks();
             if (g_Stick.Active && ev.tfinger.fingerId == g_Stick.Finger)
             {
                 const WISP_GEOMETRY::CPoint2Di at = TouchToWindow(ev.tfinger.x, ev.tfinger.y);
@@ -1420,6 +1414,7 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
 
         case SDL_FINGERUP:
         {
+            g_LastTouchEventTicks = SDL_GetTicks();
             if (g_TouchStick.ButtonHeld && ev.tfinger.fingerId == g_ButtonFinger)
             {
                 g_TouchStick.ButtonHeld = false;
