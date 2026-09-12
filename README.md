@@ -250,7 +250,6 @@ means nothing. They are dead code worth deleting for tidiness, not a gap.
   been tested since these changes.
 - The plugin system is not portable and no attempt has been made to replace it.
 
-
 ---
 
 ## Orion Community
@@ -278,33 +277,6 @@ and does not know about this fork's builds.
 
 * [Orion.dll](https://github.com/Hotride/OrionDLL) protocol cryptography
 * [Orion Launcher](https://github.com/Hotride/OrionLauncher)
-
---------------
-
----
-
-## Contributing
-
-See the project planning [here](https://github.com/Hotride/OrionUO/projects) to find tasks on which you can help.
-
-  > More detailed contribution documentation soon
-
-## Contributors
-
-[Hotride](https://github.com/Hotride/) (Author)
-
-[AimedNuu](https://github.com/AimedNuu)
-
-and [Others](https://github.com/Hotride/OrionUO/graphs/contributors)
-
---------------
-## Support this project, make a donation!
-
-[PayPal](https://www.paypal.me/Hotride)
-
-WebMoney: R644829964694 Z983232789532 E400319624386
-
-Patreon: https://www.patreon.com/hotride
 
 ---
 
