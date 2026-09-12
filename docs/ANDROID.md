@@ -155,8 +155,20 @@ Then push the UO data - which is **not** in the APK and must never be put there 
 into the app's external files directory:
 
 ```bash
-adb push "/path/to/Ultima Online/." /sdcard/Android/data/uk.co.jmaul.orionuo/files/
+dest=/sdcard/Android/data/uk.co.jmaul.orionuo/files
+adb push "/path/to/Ultima Online/." "$dest/"
+adb shell "chmod -R a+rX $dest"
 ```
+
+The chmod matters. `adb push` creates directories owned by `shell` with no
+access for anyone else, and the client runs as its own user: files sitting
+directly in `files/` are readable because that directory belongs to the app, but
+anything in a pushed *subdirectory* is not. `Music/Digital/Config.txt` read back
+as "File not found" until the modes were opened up, which left the music table
+empty and the client asking SDL_mixer to load a track called "".
+
+`Models/`, `Orion Launcher/` and the `.bik` intro videos are never read and can
+be left out; `Music/` is wanted if you want music.
 
 The client takes its shard address from the command line (`-login host,port`),
 and Android has no command line. `OrionActivity.getArguments()` supplies one,

@@ -1130,6 +1130,36 @@ void CWindow::ProcessTouch()
         }
     }
 
+    // Nothing is touching the screen, yet the client still believes a button is
+    // held. SDL can lose a FINGERUP - a lift that leaves the window, a gesture
+    // the system swallows - and the press then never ends: a dragged paperdoll
+    // stayed stuck to the cursor and jumped to wherever was touched next.
+    if (SDL_GetNumTouchFingers(SDL_GetTouchDevice(0)) == 0 &&
+        (g_Touch.Active || g_Touch.LeftDown || g_Touch.RightDown || g_Stick.Active ||
+         g_TouchStick.ButtonHeld))
+    {
+        if (g_Touch.LeftDown)
+            TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, g_Touch.Current);
+
+        if (g_Touch.RightDown)
+            TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, g_Touch.Current);
+
+        if (g_Stick.RightDown)
+            TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, TouchStickToCursor());
+
+        if (g_Stick.Moving)
+            SaveTouchStickPlacement();
+
+        g_Touch.Active = false;
+        g_Touch.LeftDown = false;
+        g_Touch.RightDown = false;
+        g_Stick.Active = false;
+        g_Stick.RightDown = false;
+        g_Stick.Moving = false;
+        g_TouchStick.ButtonHeld = false;
+        g_TouchStick.OffsetX = 0.0f;
+        g_TouchStick.OffsetY = 0.0f;
+    }
 #endif
 }
 //----------------------------------------------------------------------------------

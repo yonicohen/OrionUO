@@ -1616,7 +1616,9 @@ void CGameScreen::DrawTouchStick()
     // controls belong to the same interface as everything else: 0x1393 is the
     // ornate ring UO frames the minimap with, and the war toggle is the very
     // button the paperdoll uses for it.
-    const float ringAlpha = g_TouchStick.Active ? 0.95f : 0.55f;
+    // Nearly invisible until a thumb is on it: it sits over the world, and the
+    // world is the thing worth looking at.
+    const float ringAlpha = g_TouchStick.Active ? 0.95f : 0.22f;
 
     // CGLTexture's width/height draw TILES the art rather than scaling it, so
     // anything resized here is drawn at its natural size under a scale on the
