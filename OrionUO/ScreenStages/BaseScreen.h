@@ -74,9 +74,50 @@ public:
 	*/
     virtual void DrawSmoothMonitorEffect();
 
-    virtual void OnLeftMouseButtonDown() { m_Gump.OnLeftMouseButtonDown(); }
+    // A press that landed on the keyboard belongs to the keyboard; anything
+    // else goes to the screen's own gump as before.
+    bool PressedKeyboard() const
+    {
+        return (g_GumpKeyboard != NULL && g_PressedObject.LeftGump == g_GumpKeyboard);
+    }
+
+    virtual void OnLeftMouseButtonDown()
+    {
+        if (PressedKeyboard())
+            g_GumpKeyboard->OnLeftMouseButtonDown();
+        else
+            m_Gump.OnLeftMouseButtonDown();
+    }
     virtual void OnLeftMouseButtonUp()
     {
+
+        if (PressedKeyboard())
+        {
+            // Dragging is committed by the gump manager in the world, and these
+            // screens never go near it - so a keyboard carried around here would
+            // snap back to where it started unless the move is applied by hand.
+            if (g_PressedObject.LeftObject == NULL || !g_PressedObject.LeftSerial ||
+                g_PressedObject.TestMoveOnDrag())
+            {
+                const WISP_GEOMETRY::CPoint2Di offset = g_MouseManager.LeftDroppedOffset();
+
+                if (offset.X || offset.Y)
+                {
+                    g_GumpKeyboard->SetX(g_GumpKeyboard->GetX() + offset.X);
+                    g_GumpKeyboard->SetY(g_GumpKeyboard->GetY() + offset.Y);
+                }
+            }
+
+            g_GumpKeyboard->OnLeftMouseButtonUp();
+            g_GumpKeyboard->WantRedraw = true;
+
+            // Anything that asked to be closed is closed here, where nothing is
+            // walking its items any more. In the world the gump manager does
+            // this itself; these screens never call into it.
+            g_GumpManager.RemoveMarked();
+            return;
+        }
+
         m_Gump.OnLeftMouseButtonUp();
         m_Gump.WantRedraw = true;
     }

@@ -149,6 +149,12 @@ float CGump::InterfaceScale() const
     if (GumpType == GT_NONE)
         return 1.0f;
 
+    // Before the world, everything is drawn into a 640x480 scene that is itself
+    // blown up to fill the screen. Magnifying a gump there as well multiplies
+    // the two, which is what made the keyboard enormous on the login screen.
+    if (g_GameState < GS_GAME)
+        return 1.0f;
+
     const WISP_GEOMETRY::CSize size = g_OrionWindow.GetSize();
     float scale = size.Height / 800.0f;
 

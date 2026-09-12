@@ -11,7 +11,6 @@
 //----------------------------------------------------------------------------------
 #include "stdafx.h"
 
-bool g_ForceGridContainers = false;
 ushort g_GridContainerBackground = 0x0BB8;
 #include "FileSystem.h"
 //----------------------------------------------------------------------------------
@@ -1375,7 +1374,10 @@ int CConfigManager::GetConfigKeyCode(const string &key)
                                              "CheckPing",
                                              "PingTimer",
                                              "CancelNewTargetSystemOnShiftEsc",
-                                             "DrawStatusForHumanoids" };
+                                             "DrawStatusForHumanoids",
+                                             "UseGridContainers",
+                                             "GridContainerColumns",
+                                             "GridContainerRows" };
 
     string str = ToLowerA(key);
 
@@ -1501,6 +1503,15 @@ bool CConfigManager::Load(const os_path &path)
                     break;
                 case CMKC_SHOW_DEFAULT_CONSOLE_ENTRY_MODE:
                     ShowDefaultConsoleEntryMode = ToBool(strings[1]);
+                    break;
+                case CMKC_USE_GRID_CONTAINERS:
+                    m_UseGridContainers = ToBool(strings[1]);
+                    break;
+                case CMKC_GRID_CONTAINER_COLUMNS:
+                    GridContainerColumns = atoi(strings[1].c_str());
+                    break;
+                case CMKC_GRID_CONTAINER_ROWS:
+                    GridContainerRows = atoi(strings[1].c_str());
                     break;
                 case CMKC_DRAW_AURA_STATE:
                     SetDrawAuraState(atoi(strings[1].c_str()));
@@ -1910,6 +1921,9 @@ void CConfigManager::Save(const os_path &path)
         writter.WriteInt("DrawStatusConditionValue", DrawStatusConditionValue);
         writter.WriteBool("RemoveStatusbarsWithoutObjects", RemoveStatusbarsWithoutObjects);
         writter.WriteBool("ShowDefaultConsoleEntryMode", ShowDefaultConsoleEntryMode);
+        writter.WriteBool("UseGridContainers", m_UseGridContainers);
+        writter.WriteInt("GridContainerColumns", GridContainerColumns);
+        writter.WriteInt("GridContainerRows", GridContainerRows);
         writter.WriteInt("DrawAuraState", m_DrawAuraState);
         writter.WriteBool("DrawAuraWithCtrlPressed", DrawAuraWithCtrlPressed);
         writter.WriteInt("ScreenshotFormat", ScreenshotFormat);

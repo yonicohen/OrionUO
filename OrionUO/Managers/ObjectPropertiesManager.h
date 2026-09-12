@@ -50,6 +50,15 @@ public:
     void Display(int serial);
 
     void Add(int serial, const CObjectProperty &objectProperty);
+
+    // What the server has said about one object, for anything that wants to
+    // read the properties rather than draw them - searching a container by what
+    // is written on its contents, for one.
+    const CObjectProperty *Get(uint serial) const
+    {
+        OBJECT_PROPERTIES_MAP::const_iterator found = m_Map.find(serial);
+        return (found != m_Map.end()) ? &found->second : NULL;
+    }
 };
 //----------------------------------------------------------------------------------
 extern CObjectPropertiesManager g_ObjectPropertiesManager;

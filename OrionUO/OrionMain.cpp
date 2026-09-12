@@ -151,8 +151,6 @@ int main(int argc, char **argv)
             g_SharpFilter = false;
         else if (!strcmp(argv[i], "--novsync"))
             g_UseVSync = false;
-        else if (!strcmp(argv[i], "--gridcontainers"))
-            g_ForceGridContainers = true;
         else if (!strcmp(argv[i], "--gridbg") && i + 1 < argc)
             g_GridContainerBackground = (ushort)strtol(argv[++i], nullptr, 0);
     }

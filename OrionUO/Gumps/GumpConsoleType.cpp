@@ -175,6 +175,18 @@ void CGumpConsoleType::InitToolTip()
     }
 }
 //----------------------------------------------------------------------------------
+void CGumpConsoleType::SetSelectedType(int type)
+{
+    if (type < 0 || type == m_SelectedType)
+        return;
+
+    DeleteConsolePrefix();
+    m_SelectedType = type;
+    SetConsolePrefix();
+
+    WantUpdateContent = true;
+}
+//----------------------------------------------------------------------------------
 void CGumpConsoleType::UpdateContent()
 {
     WISPFUN_DEBUG("c92_f9");

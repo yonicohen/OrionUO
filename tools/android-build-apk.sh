@@ -40,6 +40,17 @@ if [[ ! -f "$lib" ]]; then
     exit 2
 fi
 
+# A failed compile leaves the previous library in place, and packaging it puts a
+# stale build on the phone while reporting a fresh one - which has already cost
+# an afternoon once. If any source is newer than the library, it did not build.
+newer="$(find "$repo/OrionUO" \( -name '*.cpp' -o -name '*.h' \) -newer "$lib" 2>/dev/null |
+    sed -n 1p)"
+if [[ -n "$newer" ]]; then
+    echo "error: $(basename "$lib") is older than $newer" >&2
+    echo "       the last build did not succeed - run tools/android-build.sh and fix it" >&2
+    exit 2
+fi
+
 # Android's d8 crashes on class files from very new JDKs, so prefer a 17 if one
 # is installed. Override with JAVA_HOME if you have a different one.
 if [[ -z "${JAVA_HOME:-}" ]]; then

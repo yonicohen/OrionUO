@@ -893,8 +893,17 @@ void CGumpManager::OnRightMouseButtonUp(bool blocked)
                                 gi = next;
                             }
                         }
-                        else
+                        else if (!g_ConfigManager.GetUseGridContainers())
+                        {
+                            // Normally a container forgets what was in it the
+                            // moment it is closed. A grid's search looks through
+                            // the bags inside a bag, and that is worth nothing if
+                            // closing one erases it - so the contents are kept.
+                            // They can go stale, and reopening the bag resyncs
+                            // them, which is the trade for being able to find
+                            // something without opening every pouch first.
                             obj->Clear();
+                        }
 
                         obj->Opened = false;
                         CloseGump(gump->Serial, 0, GT_CONTAINER);
@@ -1122,6 +1131,10 @@ bool CGumpManager::OnKeyDown(const WPARAM &wParam, const LPARAM &lParam, bool bl
                 case GT_BULLETIN_BOARD_ITEM:
                 case GT_GENERIC:
                 case GT_BOOK:
+                // A whitelist, and a container was not on it - so backspace in a
+                // grid's search box went nowhere at all.
+                case GT_CONTAINER:
+                case GT_KEYBOARD:
                 {
                     gump->OnKeyDown(wParam, lParam);
 

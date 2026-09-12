@@ -50,19 +50,23 @@ void CGameConsole::Send(wstring text, ushort defaultColor)
 
             if ((type != GCTT_NORMAL && len > 2) || type == GCTT_PARTY)
             {
+                // However long the prefix for this mode actually is, rather
+                // than a two that only happened to be right.
+                const int prefixLength = (int)g_ConsolePrefix[type].length();
+
                 if (type == GCTT_YELL)
                 {
                     speechType = ST_YELL;
-                    offset = 2;
+                    offset = prefixLength;
                 }
                 else if (type == GCTT_WHISPER)
                 {
                     speechType = ST_WHISPER;
-                    offset = 2;
+                    offset = prefixLength;
                 }
                 else if (type == GCTT_EMOTE)
                 {
-                    text = text.replace(0, 2, L": *").append(L"*");
+                    text = text.replace(0, prefixLength, L": *").append(L"*");
                     speechType = ST_EMOTE;
                     sendColor = g_ConfigManager.EmoteColor;
                     offset = 2;
@@ -71,13 +75,13 @@ void CGameConsole::Send(wstring text, ushort defaultColor)
                 {
                     speechType = ST_GUILD_CHAT;
                     sendColor = g_ConfigManager.GuildMessageColor;
-                    offset = 2;
+                    offset = prefixLength;
                 }
                 else if (type == GCTT_ALLIANCE)
                 {
                     sendColor = g_ConfigManager.AllianceMessageColor;
                     speechType = ST_ALLIANCE_CHAT;
-                    offset = 2;
+                    offset = prefixLength;
                 }
                 else if (type == GCTT_PARTY)
                 {
@@ -165,6 +169,20 @@ void CGameConsole::Send(wstring text, ushort defaultColor)
     }
 }
 //----------------------------------------------------------------------------------
+// The prefixes are two characters - "! ", "; " and so on - and these used to be
+// matched with a memcmp of four *bytes*. wchar_t is two bytes on Windows, where
+// that compared both characters, and four everywhere else, where it compared
+// only the first. So on this port "!hello" was taken for a yell, and Send then
+// cut a fixed two characters off the front and sent "ello".
+static bool HasConsolePrefix(const wchar_t *text, size_t len, GAME_CONSOLE_TEXT_TYPE type)
+{
+    const wstring &prefix = g_ConsolePrefix[type];
+    const size_t size = prefix.length();
+
+    return (size != 0 && len >= size && !memcmp(text, prefix.c_str(), size * sizeof(wchar_t)));
+}
+//----------------------------------------------------------------------------------
+//----------------------------------------------------------------------------------
 wstring CGameConsole::IsSystemCommand(
     const wchar_t *text, size_t &len, int &member, GAME_CONSOLE_TEXT_TYPE &type)
 {
@@ -240,17 +258,17 @@ wstring CGameConsole::IsSystemCommand(
             type = GCTT_PARTY;
         }
     }
-    else if (!memcmp(&text[0], g_ConsolePrefix[GCTT_YELL].c_str(), 4)) //Yell
+    else if (HasConsolePrefix(text, len, GCTT_YELL)) //Yell
     {
         result = L"Yell:";
         type = GCTT_YELL;
     }
-    else if (!memcmp(&text[0], g_ConsolePrefix[GCTT_WHISPER].c_str(), 4)) //Whisper
+    else if (HasConsolePrefix(text, len, GCTT_WHISPER)) //Whisper
     {
         result = L"Whisper:";
         type = GCTT_WHISPER;
     }
-    else if (!memcmp(&text[0], g_ConsolePrefix[GCTT_EMOTE].c_str(), 4)) //Emote
+    else if (HasConsolePrefix(text, len, GCTT_EMOTE)) //Emote
     {
         result = L"Emote:";
         type = GCTT_EMOTE;
@@ -261,17 +279,17 @@ wstring CGameConsole::IsSystemCommand(
         result = L"C:";
         type = GCTT_C;
     }
-    else if (!memcmp(&text[0], g_ConsolePrefix[GCTT_BROADCAST].c_str(), 4)) //Broadcast
+    else if (HasConsolePrefix(text, len, GCTT_BROADCAST)) //Broadcast
     {
         result = L"Broadcast:";
         type = GCTT_BROADCAST;
     }
-    else if (!memcmp(&text[0], g_ConsolePrefix[GCTT_GUILD].c_str(), 4)) //Guild
+    else if (HasConsolePrefix(text, len, GCTT_GUILD)) //Guild
     {
         result = L"Guild:";
         type = GCTT_GUILD;
     }
-    else if (!memcmp(&text[0], g_ConsolePrefix[GCTT_ALLIANCE].c_str(), 4)) //Alliance
+    else if (HasConsolePrefix(text, len, GCTT_ALLIANCE)) //Alliance
     {
         result = L"Alliance:";
         type = GCTT_ALLIANCE;

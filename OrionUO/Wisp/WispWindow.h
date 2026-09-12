@@ -128,6 +128,9 @@ public:
     // A two-finger tap asks for it instead, and asks again to dismiss it.
     void ToggleTextInput();
 
+    // Opens or closes the client's own on-screen keyboard.
+    void ToggleKeyboardGump();
+
 private:
     bool m_TextInputActive = false;
     bool m_TextInputRequested = false;
@@ -136,6 +139,7 @@ private:
     // stuck at "shown" and every later tap on a field did nothing, so a tap
     // always re-asks.
     bool m_TextInputDirty = false;
+
     void TouchMouseEvent(uint type, uchar button, const WISP_GEOMETRY::CPoint2Di &at);
 
 public:

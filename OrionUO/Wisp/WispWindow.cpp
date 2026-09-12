@@ -864,6 +864,54 @@ WISP_GEOMETRY::CPoint2Di TouchToWindow(float normalizedX, float normalizedY)
 #endif
 //----------------------------------------------------------------------------------
 bool g_InSyntheticTouchEvent = false;
+// The client draws its own keyboard rather than asking for Android's, which
+// takes about half a landscape screen, cannot be told not to, and forces the
+// window out of immersive mode to have somewhere to appear. Ours is a gump: it
+// opens where it was left, moves like anything else, and closes with its own
+// button or by tapping it twice like any other gump.
+void CWindow::ToggleKeyboardGump()
+{
+#if defined(__ANDROID__)
+    if (g_GumpKeyboard != NULL)
+    {
+        g_GumpManager.RemoveGump(g_GumpKeyboard);
+        return;
+    }
+
+    // In the world it goes along the bottom, clear of the status bar and
+    // paperdoll the client puts on the right; before that the login screen is
+    // drawn into a letterboxed 640x480 scene, so it is placed in those units.
+    const WISP_GEOMETRY::CSize size = GetSize();
+
+    int width = 0;
+    int height = 0;
+    CGumpKeyboard::PreferredSize(width, height);
+
+    int x = (size.Width - width) / 2;
+    int y = size.Height - height - 20;
+
+    if (g_GameState < GS_GAME)
+    {
+        // The pre-game screens are a letterboxed 640x480 scene, and a gump there
+        // is placed in those units rather than the window's. It sits at the top
+        // there: the account and password fields are in the lower half, and a
+        // keyboard over the thing being typed into is no use.
+        x = (640 - width) / 2;
+        y = 8;
+    }
+
+    // Wherever it was last put, if it has been put anywhere.
+    CGumpKeyboard::RecallPlacement(x, y);
+
+    if (x < 0)
+        x = 0;
+    if (y < 0)
+        y = 0;
+
+    g_GumpManager.AddGump(new CGumpKeyboard((short)x, (short)y));
+#endif
+}
+//----------------------------------------------------------------------------------
 void CWindow::TouchMouseEvent(uint type, uchar button, const WISP_GEOMETRY::CPoint2Di &at)
 {
 #if defined(__ANDROID__)
@@ -956,27 +1004,18 @@ void CWindow::ToggleTextInput()
 void CWindow::UpdateTextInput(bool wanted)
 {
 #if defined(__ANDROID__)
-    wanted = wanted || m_TextInputRequested;
-
-    // Toggling this is what shows and hides the soft keyboard, so only ask for
-    // it while something is actually going to receive the typing - but a tap
-    // re-asks even when nothing has changed, because the keyboard may have been
-    // dismissed without the client hearing about it.
+    // The client draws its own keyboard everywhere now, login screens included:
+    // it does not take half the screen and does not force the window out of
+    // immersive mode to find somewhere to appear, and it carries the chat modes.
+    // Something taking focus opens it - once, on the change, so that closing it
+    // while a field is still focused does not reopen it every frame.
     const bool changed = (wanted != m_TextInputActive);
-    if (!changed && !m_TextInputDirty)
-        return;
 
-    m_TextInputDirty = false;
     m_TextInputActive = wanted;
+    m_TextInputDirty = false;
 
-    // Immersive fullscreen leaves the keyboard with nowhere to draw - see
-    // OrionActivity.setImmersiveMode - so step out of it first and back afterwards.
-    AndroidSetImmersive(!wanted);
-
-    if (wanted)
-        SDL_StartTextInput();
-    else if (changed)
-        SDL_StopTextInput();
+    if (changed && wanted && g_GumpKeyboard == NULL)
+        ToggleKeyboardGump();
 #else
     (void)wanted;
 #endif
@@ -1083,7 +1122,7 @@ static void UpdateTouchStickBounds()
 
     // On the upper-left rim, away from the war toggle above and from where a
     // right handed thumb rests.
-    g_TouchStick.GripRadius = g_TouchStick.Radius / 3;
+    g_TouchStick.GripRadius = g_TouchStick.Radius / 4;
     g_TouchStick.GripX = g_TouchStick.CenterX - (int)(g_TouchStick.Radius * 0.72f);
     g_TouchStick.GripY = g_TouchStick.CenterY - (int)(g_TouchStick.Radius * 0.72f);
 
@@ -1477,7 +1516,7 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
                 // keyboard up over the game forever.
                 if (!g_Touch.LeftDown && !g_Touch.RightDown)
                 {
-                    ToggleTextInput();
+                    ToggleKeyboardGump();
                     g_Touch.Active = false;
                 }
                 break;

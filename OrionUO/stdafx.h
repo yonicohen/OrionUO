@@ -255,6 +255,7 @@ class CGump;
 #include "Gumps/GumpGeneric.h"
 #include "Gumps/GumpGrayMenu.h"
 #include "Gumps/GumpJournal.h"
+#include "Gumps/GumpKeyboard.h"
 #include "Gumps/GumpMap.h"
 #include "Gumps/GumpMenu.h"
 #include "Gumps/GumpMenubar.h"

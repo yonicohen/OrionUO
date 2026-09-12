@@ -309,7 +309,8 @@ enum GUMP_TYPE
     GT_RACIAL_ABILITY,        //!Гамп рассовой абилки 100%
     GT_CUSTOM_HOUSE,
     GT_PROPERTY,
-    GT_PROPERTY_ICON
+    GT_PROPERTY_ICON,
+    GT_KEYBOARD //!On-screen keyboard, for a screen that has no other one
 };
 //----------------------------------------------------------------------------------
 //!Типы объектов гампов

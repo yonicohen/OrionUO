@@ -38,7 +38,19 @@ void CBaseScreen::Render(bool mode)
 
         m_Gump.Draw();
 
-        InitToolTip();
+        // The login and character screens draw one gump of their own and never
+        // go near the gump manager, so the on-screen keyboard has to be drawn
+        // and picked here or there is no way to type a name or a password
+        // without the system keyboard taking half the screen.
+        if (g_GumpKeyboard != NULL)
+            g_GumpKeyboard->Draw();
+
+        // Only for something of this screen's own. A screen's tooltip code reads
+        // the selected object's serial as one of its own ids - the server list
+        // looks a shard up by it - so handing it a keyboard key's serial had it
+        // dereference a shard that does not exist.
+        if (g_SelectedObject.Gump == &m_Gump)
+            InitToolTip();
 
         DrawSmoothMonitorEffect();
 
@@ -50,10 +62,19 @@ void CBaseScreen::Render(bool mode)
     {
         g_SelectedObject.Clear();
 
-        CRenderObject *selected = m_Gump.Select();
+        // The keyboard is drawn over the screen, so it is asked first and wins.
+        CRenderObject *selected = NULL;
 
-        if (selected != NULL)
-            g_SelectedObject.Init(selected, &m_Gump);
+        if (g_GumpKeyboard != NULL)
+            selected = g_GumpKeyboard->Select();
+
+        if (selected == NULL)
+        {
+            selected = m_Gump.Select();
+
+            if (selected != NULL)
+                g_SelectedObject.Init(selected, &m_Gump);
+        }
 
         if (g_SelectedObject.Object != g_LastSelectedObject.Object)
         {

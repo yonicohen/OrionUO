@@ -49,6 +49,12 @@ public:
     void DeleteConsolePrefix();
     void SetConsolePrefix();
 
+    // Chosen from somewhere other than this gump - the on-screen keyboard has
+    // the same modes on it, and swapping one prefix for another without
+    // disturbing what has been typed is this class's job.
+    int GetSelectedType() const { return m_SelectedType; }
+    void SetSelectedType(int type);
+
     GUMP_BUTTON_EVENT_H;
     GUMP_CHECKBOX_EVENT_H;
     GUMP_TEXT_ENTRY_EVENT_H;

@@ -11,10 +11,6 @@
 #define CONFIGMANAGER_H
 //----------------------------------------------------------------------------------
 //!Класс менеджера конфига
-// Set by --gridcontainers, so the layout can be tried before there is any UI
-// for it and without a saved profile.
-extern bool g_ForceGridContainers;
-//----------------------------------------------------------------------------------
 // Backing art for a gridded container. The Character Status frame itself is fixed
 // size artwork and cannot be stretched to fit, so this is a resizepic in a similar
 // style. Overridable with --gridbg to compare candidates without a rebuild.
@@ -51,7 +47,12 @@ protected:
     bool m_UseGlobalMapLayer = false;
     bool m_NoDrawRoofs = false;
     bool m_UseGLListsForInterface = false;
-    bool m_UseGridContainers = false;
+    // On by default. The container artwork is a picture of one particular bag
+    // with its own irregular interior, and hunting a ring in it is tedious with
+    // a mouse and hopeless with a fingertip. It was behind a command line flag,
+    // which meant nobody ever saw it; it is a setting now, and can be turned off
+    // by anyone who wants the original bags back.
+    bool m_UseGridContainers = true;
     uchar m_PingTimer = 10;
     uchar m_ItemPropertiesMode = OPM_FOLLOW_MOUSE;
     bool m_ItemPropertiesIcon = false;
@@ -239,8 +240,13 @@ public:
 
     // Lays container contents out in fixed cells instead of at the free
     // coordinates the server sends for each item.
-    bool GetUseGridContainers() { return m_UseGridContainers || g_ForceGridContainers; };
+    bool GetUseGridContainers() { return m_UseGridContainers; };
     void SetUseGridContainers(bool val) { m_UseGridContainers = val; };
+
+    // The shape of a grid panel, in cells. Set by dragging a container's corner
+    // handle, and shared by all of them.
+    int GridContainerColumns = 4;
+    int GridContainerRows = 4;
     void SetUseGLListsForInterface(bool val);
 
     uchar GetPingTimer() { return m_PingTimer; };
@@ -417,6 +423,9 @@ public:
         CMKC_PING_TIMER,
         CMKC_CANCEL_NEW_TARGET_SYSTEM_ON_SHIFT_ESC,
         CMKC_DRAW_STATUS_FOR_HUMANOIDS,
+        CMKC_USE_GRID_CONTAINERS,
+        CMKC_GRID_CONTAINER_COLUMNS,
+        CMKC_GRID_CONTAINER_ROWS,
         CMKC_COUNT
     };
 

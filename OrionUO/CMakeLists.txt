@@ -170,6 +170,7 @@ set(gumps_src
   Gumps/GumpGeneric.cpp
   Gumps/GumpGrayMenu.cpp
   Gumps/GumpJournal.cpp
+  Gumps/GumpKeyboard.cpp
   Gumps/GumpMap.cpp
   Gumps/GumpMenubar.cpp
   Gumps/GumpMenu.cpp

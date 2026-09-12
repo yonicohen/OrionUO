@@ -15,6 +15,8 @@ const uint CGumpContainer::ID_GC_LOCK_MOVING = 0xFFFFFFFE;
 const uint CGumpContainer::ID_GC_MINIMIZE = 0xFFFFFFFF;
 const uint CGumpContainer::ID_GC_GRID_SCROLL_UP = 0xFFFFFFFD;
 const uint CGumpContainer::ID_GC_GRID_SCROLL_DOWN = 0xFFFFFFFC;
+const uint CGumpContainer::ID_GC_GRID_RESIZE = 0xFFFFFFFB;
+const uint CGumpContainer::ID_GC_GRID_SEARCH = 0xFFFFFFFA;
 //----------------------------------------------------------------------------------
 CGumpContainer::CGumpContainer(uint serial, uint id, short x, short y)
     : CGump(GT_CONTAINER, serial, x, y)
@@ -64,15 +66,62 @@ CGumpContainer::CGumpContainer(uint serial, uint id, short x, short y)
         new CGUIButton(ID_GC_GRID_SCROLL_DOWN, 0x0825, 0x0825, 0x0825, 0, 0));
     m_GridScrollDown->Visible = false;
 
+    // The corner handle. Same art the world map uses for the same job, so it
+    // reads as the same thing.
+    m_GridResizerPlate = (CGUIColoredPolygone *)Add(
+        new CGUIColoredPolygone(0, 0, 0, 0, GridResizerPlate, GridResizerPlate, 0x30326A8E));
+    m_GridResizerPlate->Visible = false;
+
+    m_GridResizer = (CGUIResizeButton *)Add(
+        new CGUIResizeButton(ID_GC_GRID_RESIZE, 0x0837, 0x0838, 0x0838, 0, 0));
+    m_GridResizer->Visible = false;
+#if defined(__ANDROID__)
+    m_GridResizer->HitPadding = GridResizerPlate / 2;
+#endif
+
+    m_GridSearchBack = (CGUIColoredPolygone *)Add(
+        new CGUIColoredPolygone(ID_GC_GRID_SEARCH, 0, 0, 0, 10, 10, 0x60000000));
+    m_GridSearchBack->Visible = false;
+
+    m_GridSearchHint = (CGUIText *)Add(new CGUIText(0x0386, 0, 0));
+    m_GridSearchHint->CreateTextureW(1, L"Search", 30, 100, TS_LEFT);
+    m_GridSearchHint->Visible = false;
+    // Drawn but never selected. Text is hit-testable across its whole texture
+    // and this one is added after the field's backing, so it won every hit test
+    // and swallowed the click that was supposed to focus the field.
+    m_GridSearchHint->Enabled = false;
+
+    m_GridSearch = (CGUITextEntry *)Add(new CGUITextEntry(
+        ID_GC_GRID_SEARCH, 0x0481, 0x0481, 0x0481, 0, 0, 0, false, 1));
+    m_GridSearch->CheckOnSerial = true;
+    m_GridSearch->m_Entry.MaxLength = 32;
+    m_GridSearch->Visible = false;
+
+
+    m_GridLines = (CGUIDataBox *)Add(new CGUIDataBox());
+
     Add(new CGUIShader(&g_ColorizerShader, true));
 
+    // The cells are clipped to the panel so a row at the edge of a scrolled view
+    // is cut off rather than disappearing whole, and so nothing is ever drawn
+    // outside the panel it belongs to.
+    m_GridScissorOn = (CGUIScissor *)Add(new CGUIScissor(true, 0, 0, 0, 0, 1, 1));
+    m_GridScissorOn->Visible = false;
+
     m_DataBox = (CGUIDataBox *)Add(new CGUIDataBox());
+
+    m_GridScissorOff = (CGUIScissor *)Add(new CGUIScissor(false, 0, 0, 0, 0, 0, 0));
+    m_GridScissorOff->Visible = false;
 
     Add(new CGUIShader(&g_ColorizerShader, false));
 }
 //----------------------------------------------------------------------------------
 CGumpContainer::~CGumpContainer()
 {
+    // The focused entry is a raw pointer into this gump's own field, and the
+    // world keeps typing into whatever it points at.
+    if (m_GridSearch != NULL && g_EntryPointer == &m_GridSearch->m_Entry)
+        g_EntryPointer = &g_GameConsole;
 }
 //----------------------------------------------------------------------------------
 string CGumpContainer::GridCountText(int count)
@@ -92,6 +141,90 @@ string CGumpContainer::GridCountText(int count)
     char buffer[32] = { 0 };
     sprintf_s(buffer, "%.1fm", count / 1000000.0f);
     return string(buffer);
+}
+//----------------------------------------------------------------------------------
+// Matched against the item's name and against whatever the server has said
+// about it, so "vanq" or "exceptional" finds things a name never would.
+bool CGumpContainer::MatchesSearch(CGameItem *item) const
+{
+    if (m_GridSearch == NULL || m_GridSearch->m_Entry.Length() == 0)
+        return true;
+
+    const wstring needle = ToLowerW(m_GridSearch->m_Entry.Data());
+
+    if (needle.length() == 0)
+        return true;
+
+    const wstring name = ToLowerW(ToWString(item->GetName()));
+
+    if (name.length() != 0 && name.find(needle) != wstring::npos)
+        return true;
+
+    // UO sends an item's name and properties only when something asks for them -
+    // hovering it, or picking it up - so a bag that has just been opened has
+    // nothing to match against and the search looked broken. The tile data name
+    // is in the client's own files and is there from the start: it is what the
+    // server would call the thing anyway, short of a custom name.
+    const ushort graphic = item->Graphic;
+
+    if (graphic < g_Orion.m_StaticData.size())
+    {
+        const wstring tileName = ToLowerW(ToWString(g_Orion.m_StaticData[graphic].Name));
+
+        if (tileName.length() != 0 && tileName.find(needle) != wstring::npos)
+            return true;
+    }
+
+    const CObjectProperty *properties = g_ObjectPropertiesManager.Get(item->Serial);
+
+    if (properties != NULL)
+    {
+        if (ToLowerW(properties->Name).find(needle) != wstring::npos)
+            return true;
+
+        if (ToLowerW(properties->Data).find(needle) != wstring::npos)
+            return true;
+    }
+
+    return false;
+}
+//----------------------------------------------------------------------------------
+bool CGumpContainer::Searching() const
+{
+    return (m_GridSearch != NULL && m_GridSearch->m_Entry.Length() != 0);
+}
+//----------------------------------------------------------------------------------
+// A bag holds bags, and "where is my dagger" should not depend on remembering
+// which one it went into. While a search is running the grid shows matches from
+// the whole tree rather than only this container's own contents.
+//
+// Only what the client already knows: UO sends a container's contents when it is
+// opened, so a pouch that has never been opened this session has nothing in it
+// to find.
+void CGumpContainer::CollectMatches(CGameItem *parent, std::vector<CGameItem *> &out) const
+{
+    if (parent == NULL)
+        return;
+
+    QFOR(item, parent->m_Items, CGameItem *)
+    {
+        if (item->Count <= 0)
+            continue;
+
+        // Worn layers belong to the wearer, not to the bag - except on a corpse,
+        // where the client shows what it was carrying.
+        if (item->Layer != OL_NONE && !(parent->IsCorpse() && LAYER_UNSAFE[item->Layer]))
+            continue;
+
+        if (MatchesSearch(item))
+            out.push_back(item);
+
+        // Anything the client already holds contents for, rather than anything
+        // the tile data calls a container: the flag is what the art means, and
+        // what matters here is whether there is something inside to look at.
+        if (item->m_Items != NULL)
+            CollectMatches(item, out);
+    }
 }
 //----------------------------------------------------------------------------------
 bool CGumpContainer::UseGrid() const
@@ -285,29 +418,58 @@ void CGumpContainer::UpdateContent()
     }
 
     m_DataBox->Clear();
+    m_GridLines->Clear();
 
     IsGameBoard = (ID == 0x091A || ID == 0x092E);
 
     const bool grid = UseGrid();
     int gridIndex = 0;
 
-    if (grid)
+    // What the panel is showing. Normally the bag's own contents; while a search
+    // is running, every match in the bag and in the bags inside it.
+    std::vector<CGameItem *> shown;
+
+    if (grid && Searching())
+        CollectMatches(container, shown);
+    else
     {
-        // Size the panel to the contents before laying anything out. Counting
-        // first costs one pass and avoids a panel that lags a frame behind.
-        int itemCount = 0;
-        QFOR(counted, container->m_Items, CGameItem *)
+        QFOR(obj, container->m_Items, CGameItem *)
         {
-            if ((counted->Layer == OL_NONE ||
-                 (container->IsCorpse() && LAYER_UNSAFE[counted->Layer])) &&
-                counted->Count > 0)
+            if (obj->Count > 0 &&
+                (obj->Layer == OL_NONE ||
+                 (container->IsCorpse() && LAYER_UNSAFE[obj->Layer])))
             {
-                itemCount++;
+                shown.push_back(obj);
             }
         }
+    }
+
+    if (grid)
+    {
+        // Not while the handle is being dragged: this gump is the one deciding
+        // the shape until the finger comes off it.
+        if (!m_StartResizeColumns)
+        {
+            GridColumns = g_ConfigManager.GridContainerColumns;
+            GridRows = g_ConfigManager.GridContainerRows;
+        }
+
+        if (GridColumns < GridMinColumns)
+            GridColumns = GridMinColumns;
+        else if (GridColumns > GridMaxColumns)
+            GridColumns = GridMaxColumns;
+
+        if (GridRows < GridMinRows)
+            GridRows = GridMinRows;
+        else if (GridRows > GridMaxRows)
+            GridRows = GridMaxRows;
+
+        // Size the panel to the contents before laying anything out. Counting
+        // first costs one pass and avoids a panel that lags a frame behind.
+        const int itemCount = (int)shown.size();
 
         const int rows = (itemCount + GridColumns - 1) / GridColumns;
-        const int visibleRows = (rows < GridMaxRows) ? rows : GridMaxRows;
+        const int visibleRows = (rows < GridRows) ? rows : GridRows;
 
         // Clamp here rather than when scrolling: the contents can shrink under a
         // scrolled view at any time, when something is moved out or used up.
@@ -320,35 +482,63 @@ void CGumpContainer::UpdateContent()
         // A fixed square, not a panel that shrinks to whatever is in the bag: a
         // container that changes shape every time an item is picked up is worse
         // to use than one that keeps its place on screen.
+        const int gridTop = GridBorder + GridSearchHeight;
+
         m_GridBackground->Width = GridColumns * GridCellSize + GridBorder * 2;
-        m_GridBackground->Height = GridMaxRows * GridCellSize + GridBorder * 2;
+        m_GridBackground->Height = GridRows * GridCellSize + gridTop + GridBorder;
+
+        // The search field runs the width of the panel, less room for the
+        // highlight/only toggle beside it.
+        m_GridSearch->Visible = true;
+        m_GridSearch->SetX(GridBorder + 2);
+        m_GridSearch->SetY(GridBorder);
+
+
+        // Carries the field's serial: a text entry is only clickable where its
+        // text is drawn, and an empty search box has no text at all.
+        const int fieldWidth = GridColumns * GridCellSize;
+
+        m_GridSearchBack->Visible = true;
+        m_GridSearchBack->SetX(GridBorder);
+        m_GridSearchBack->SetY(GridBorder - 2);
+        m_GridSearchBack->Width = fieldWidth;
+        m_GridSearchBack->Height = GridSearchHeight - 2;
+
+        // Says what the field is for while there is nothing in it.
+        m_GridSearchHint->Visible = (m_GridSearch->m_Entry.Length() == 0);
+        m_GridSearchHint->SetX(GridBorder + 4);
+        m_GridSearchHint->SetY(GridBorder);
+
+
 
         // Without cell edges the panel reads as items scattered on a blank sheet
         // rather than a grid. Lines rather than a box per cell: fourteen thin
         // rectangles instead of thirty-six outlines.
-        const uint lineColor = 0x60000000;
+        // UO's own gump gold, kept faint: the cells have to read as cells
+        // without competing with what is in them.
+        const uint lineColor = 0x50326A8E;
         const int gridWidth = GridColumns * GridCellSize;
-        const int gridHeight = GridMaxRows * GridCellSize;
+        const int gridHeight = GridRows * GridCellSize;
 
         for (int column = 0; column <= GridColumns; column++)
         {
-            m_DataBox->Add(new CGUIColoredPolygone(
+            m_GridLines->Add(new CGUIColoredPolygone(
                 0,
                 0,
                 GridBorder + column * GridCellSize,
-                GridBorder,
+                gridTop,
                 1,
                 gridHeight,
                 lineColor));
         }
 
-        for (int row = 0; row <= GridMaxRows; row++)
+        for (int row = 0; row <= GridRows; row++)
         {
-            m_DataBox->Add(new CGUIColoredPolygone(
+            m_GridLines->Add(new CGUIColoredPolygone(
                 0,
                 0,
                 GridBorder,
-                GridBorder + row * GridCellSize,
+                gridTop + row * GridCellSize,
                 gridWidth,
                 1,
                 lineColor));
@@ -358,9 +548,43 @@ void CGumpContainer::UpdateContent()
         m_GridScrollUp->Visible = (maxScroll > 0);
         m_GridScrollDown->Visible = (maxScroll > 0);
         m_GridScrollUp->SetX(buttonX);
-        m_GridScrollUp->SetY(GridBorder);
+        m_GridScrollUp->SetY(gridTop);
         m_GridScrollDown->SetX(buttonX);
         m_GridScrollDown->SetY(m_GridBackground->Height - GridBorder - 14);
+
+        const int handleX = m_GridBackground->Width - 6;
+        const int handleY = m_GridBackground->Height - 6;
+
+        m_GridResizer->Visible = true;
+        m_GridResizer->SetX(handleX);
+        m_GridResizer->SetY(handleY);
+
+        // Only where a fingertip has to find it. With a mouse the eight pixel
+        // handle is target enough, and a tinted square under it is just a smudge.
+#if defined(__ANDROID__)
+        m_GridResizerPlate->Visible = true;
+#else
+        m_GridResizerPlate->Visible = false;
+#endif
+        m_GridResizerPlate->SetX(handleX - GridResizerPlate / 2 + 4);
+        m_GridResizerPlate->SetY(handleY - GridResizerPlate / 2 + 4);
+
+        m_GridScissorOn->Visible = true;
+        m_GridScissorOn->SetX(GridBorder);
+        m_GridScissorOn->SetY(gridTop);
+        m_GridScissorOn->Width = gridWidth;
+        m_GridScissorOn->Height = gridHeight;
+        m_GridScissorOff->Visible = true;
+    }
+    else
+    {
+        m_GridResizer->Visible = false;
+        m_GridResizerPlate->Visible = false;
+        m_GridSearch->Visible = false;
+        m_GridSearchBack->Visible = false;
+        m_GridSearchHint->Visible = false;
+        m_GridScissorOn->Visible = false;
+        m_GridScissorOff->Visible = false;
     }
 
     m_GridBackground->Graphic = g_GridContainerBackground;
@@ -377,12 +601,8 @@ void CGumpContainer::UpdateContent()
     if (m_BodyGump != NULL)
         m_BodyGump->Visible = !grid;
 
-    QFOR(obj, container->m_Items, CGameItem *)
+    for (CGameItem *obj : shown)
     {
-        int count = obj->Count;
-
-        if ((obj->Layer == OL_NONE || (container->IsCorpse() && LAYER_UNSAFE[obj->Layer])) &&
-            count > 0)
         {
             bool doubleDraw = false;
             ushort graphic = obj->GetDrawGraphic(doubleDraw);
@@ -396,9 +616,13 @@ void CGumpContainer::UpdateContent()
 
             if (grid)
             {
+                const int gridTop = GridBorder + GridSearchHeight;
                 const int row = gridIndex / GridColumns - m_GridScrollRow;
-                drawX = GridBorder + (gridIndex % GridColumns) * GridCellSize;
-                drawY = GridBorder + row * GridCellSize;
+                const int cellX = GridBorder + (gridIndex % GridColumns) * GridCellSize;
+                const int cellY = gridTop + row * GridCellSize;
+
+                drawX = cellX;
+                drawY = cellY;
                 gridIndex++;
 
                 // Item art varies in size - a ring is tiny, a halberd is not - and
@@ -412,9 +636,10 @@ void CGumpContainer::UpdateContent()
                     drawY += (GridCellSize - art->Height) / 2;
                 }
 
-                // Outside the visible window: skip it rather than draw it beyond
-                // the panel, since nothing here clips to the panel's bounds.
-                if (row < 0 || row >= GridMaxRows)
+                // Wholly outside the visible window. A row at the edge is left
+                // in and cut off by the scissor, which is what makes scrolling
+                // read as movement rather than as rows blinking in and out.
+                if (row < -1 || row > GridRows)
                     continue;
             }
 
@@ -451,8 +676,8 @@ void CGumpContainer::UpdateContent()
                 // so starts at a different place for every item. Font 1 rather
                 // than 0: the large runic face overflowed into the next cell.
                 const int cellX = GridBorder + ((gridIndex - 1) % GridColumns) * GridCellSize;
-                const int cellY =
-                    GridBorder + ((gridIndex - 1) / GridColumns - m_GridScrollRow) * GridCellSize;
+                const int cellY = GridBorder + GridSearchHeight +
+                                  ((gridIndex - 1) / GridColumns - m_GridScrollRow) * GridCellSize;
 
                 CGUIText *countText =
                     (CGUIText *)m_DataBox->Add(new CGUIText(0x0481, cellX, cellY + GridCellSize - 16));
@@ -470,6 +695,62 @@ void CGumpContainer::UpdateContent()
             }
         }
     }
+}
+//----------------------------------------------------------------------------------
+void CGumpContainer::GUMP_RESIZE_START_EVENT_C
+{
+    m_StartResizeColumns = GridColumns;
+    m_StartResizeRows = GridRows;
+}
+//----------------------------------------------------------------------------------
+void CGumpContainer::GUMP_RESIZE_EVENT_C
+{
+    if (!m_StartResizeColumns || !m_StartResizeRows)
+        return;
+
+    // Whole cells rather than pixels: a panel two thirds of a cell wide has a
+    // column that can never hold anything. Rounding rather than truncating so
+    // the handle follows the finger instead of lagging half a cell behind it.
+    const WISP_GEOMETRY::CPoint2Di offset = g_MouseManager.LeftDroppedOffset();
+
+    const int columns =
+        m_StartResizeColumns + (int)floor(offset.X / (float)GridCellSize + 0.5f);
+    const int rows = m_StartResizeRows + (int)floor(offset.Y / (float)GridCellSize + 0.5f);
+
+    const int wasColumns = GridColumns;
+    const int wasRows = GridRows;
+
+    GridColumns = (columns < GridMinColumns) ? GridMinColumns
+                                             : (columns > GridMaxColumns ? GridMaxColumns
+                                                                         : columns);
+    GridRows = (rows < GridMinRows) ? GridMinRows : (rows > GridMaxRows ? GridMaxRows : rows);
+
+    if (GridColumns != wasColumns || GridRows != wasRows)
+    {
+        g_ConfigManager.GridContainerColumns = GridColumns;
+        g_ConfigManager.GridContainerRows = GridRows;
+
+        // Every open bag follows, so the shape is one decision rather than one
+        // per container.
+        QFOR(gump, g_GumpManager.m_Items, CGump *)
+        {
+            if (gump->GumpType == GT_CONTAINER)
+            {
+                gump->WantUpdateContent = true;
+                gump->WantRedraw = true;
+            }
+        }
+    }
+}
+//----------------------------------------------------------------------------------
+void CGumpContainer::GUMP_RESIZE_END_EVENT_C
+{
+    m_StartResizeColumns = 0;
+    m_StartResizeRows = 0;
+
+    // The shape is part of where a player has put their bags, so it is saved
+    // with the rest of the profile rather than forgotten on the next login.
+    g_Orion.SaveLocalConfig(g_PacketManager.ConfigSerial);
 }
 //----------------------------------------------------------------------------------
 void CGumpContainer::Draw()
@@ -510,10 +791,93 @@ CRenderObject *CGumpContainer::Select()
     return selected;
 }
 //----------------------------------------------------------------------------------
+// Clicking the field is what focuses it. Nothing in the client does this on its
+// own: a gump that wants an entry focused says so, which is why typing went to
+// the world instead however hard the box was clicked.
+void CGumpContainer::GUMP_TEXT_ENTRY_EVENT_C
+{
+
+    if (m_GridSearch == NULL || serial != (int)ID_GC_GRID_SEARCH)
+        return;
+
+    g_EntryPointer = &m_GridSearch->m_Entry;
+    m_GridSearch->Focused = true;
+    WantRedraw = true;
+
+#if defined(__ANDROID__)
+    // There is no hardware keyboard to start typing on.
+    g_OrionWindow.ToggleKeyboardGump();
+#endif
+}
+//----------------------------------------------------------------------------------
+// Typing goes to the search field, and only while it is the focused entry -
+// otherwise every letter meant for the world would filter a bag instead.
+void CGumpContainer::OnCharPress(const WPARAM &wParam, const LPARAM &lParam)
+{
+
+    if (m_GridSearch == NULL || g_EntryPointer != &m_GridSearch->m_Entry)
+        return;
+
+    if (g_EntryPointer->Insert((wchar_t)wParam))
+        WantUpdateContent = true;
+}
+//----------------------------------------------------------------------------------
+void CGumpContainer::OnKeyDown(const WPARAM &wParam, const LPARAM &lParam)
+{
+    if (m_GridSearch == NULL || g_EntryPointer != &m_GridSearch->m_Entry)
+        return;
+
+    switch (wParam)
+    {
+        case VK_RETURN:
+        case VK_ESCAPE:
+        {
+            // Done searching: hand the keyboard back to the world, which is
+            // what every other line of text in this client goes to.
+            g_EntryPointer = &g_GameConsole;
+            m_GridSearch->Focused = false;
+            WantRedraw = true;
+            break;
+        }
+        case VK_HOME:
+        case VK_END:
+        case VK_LEFT:
+        case VK_RIGHT:
+        case VK_BACK:
+        case VK_DELETE:
+        {
+            // The gump is passed in because the entry redraws through it; with
+            // a null there, backspace edited nothing anyone could see.
+            g_EntryPointer->OnKey(this, wParam);
+            WantUpdateContent = true;
+            break;
+        }
+        default:
+            break;
+    }
+}
+#if !USE_WISP
+//----------------------------------------------------------------------------------
+void CGumpContainer::OnTextInput(const SDL_TextInputEvent &ev)
+{
+    for (const wchar_t &ch : DecodeUTF8(ev.text))
+        OnCharPress((WPARAM)ch, 0);
+}
+//----------------------------------------------------------------------------------
+void CGumpContainer::OnKeyDown(const SDL_KeyboardEvent &ev)
+{
+    OnKeyDown((WPARAM)ev.keysym.sym, 0);
+}
+#endif
+//----------------------------------------------------------------------------------
 void CGumpContainer::GUMP_BUTTON_EVENT_C
 {
     WISPFUN_DEBUG("c93_f11");
-    if (!Minimized && serial == ID_GC_MINIMIZE && ID == 0x003C)
+    if (serial == ID_GC_GRID_SEARCH)
+    {
+        OnTextEntry(ID_GC_GRID_SEARCH);
+    }
+    else if (!Minimized && serial == ID_GC_MINIMIZE && ID == 0x003C)
         Minimized = true;
     else if (serial == ID_GC_LOCK_MOVING)
     {

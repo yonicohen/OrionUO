@@ -20,6 +20,12 @@ public:
     virtual ~CGUIResizeButton();
 
     virtual bool IsPressedOuthit() { return true; }
+
+    // Extra pixels of reach around the art. The handle is eight pixels square,
+    // which is a fine target for a mouse and no target at all for a fingertip.
+    int HitPadding = 0;
+
+    virtual bool Select();
 };
 //----------------------------------------------------------------------------------
 #endif
