@@ -78,9 +78,13 @@ echo "compiling resources"
 echo "linking apk"
 # The manifest carries a placeholder version; a release stamps the tag over it
 # so the file on a phone can be told apart from the next one.
+# --version-code and --version-name only *inject* a value when the manifest has
+# none, and ours carries a placeholder, so without --replace-version every
+# release came out as the 1.0 written there.
 version_args=()
 [[ -n "${ANDROID_VERSION_CODE:-}" ]] && version_args+=(--version-code "$ANDROID_VERSION_CODE")
 [[ -n "${ANDROID_VERSION_NAME:-}" ]] && version_args+=(--version-name "$ANDROID_VERSION_NAME")
+[[ ${#version_args[@]} -gt 0 ]] && version_args+=(--replace-version)
 
 "$bt/aapt2" link \
     -I "$android_jar" \

@@ -139,10 +139,29 @@ jobs:
           export ANDROID_NDK="$ANDROID_NDK_LATEST_HOME"
           ./tools/android-build.sh
 
+      # Signed with the same key as a release, so a phone can take either one
+      # over the other. Android refuses an install whose signature differs from
+      # what is already there, and a key generated per run means every build is
+      # a fresh app that has to be uninstalled first.
       - name: Build the APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
+          set -eu
           export ANDROID_NDK="$ANDROID_NDK_LATEST_HOME"
           export ANDROID_SDK="$ANDROID_HOME"
+
+          if [ -n "${KEYSTORE_BASE64:-}" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            export ANDROID_KEYSTORE="$RUNNER_TEMP/release.keystore"
+          fi
+
+          export ANDROID_VERSION_NAME="ci-${GITHUB_SHA:0:8}"
+          export ANDROID_VERSION_CODE="$GITHUB_RUN_NUMBER"
+
           yes 2>/dev/null | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             --sdk_root="$ANDROID_HOME" \
             "platforms;android-34" "build-tools;34.0.0" >/dev/null
