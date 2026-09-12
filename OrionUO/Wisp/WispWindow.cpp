@@ -1718,9 +1718,17 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
                     // it always does on the login screen, where something is
                     // focused from the moment it appears.
                     m_TextInputDirty = true;
-                    m_TappedTextEntry =
-                        (g_SelectedObject.Object != NULL && g_SelectedObject.Object->IsGUI() &&
-                         ((CBaseGUI *)g_SelectedObject.Object)->Type == GOT_TEXTENTRY);
+                    // A field that cannot be typed into is not a request to
+                    // type: the character list draws each name as a read-only
+                    // entry, so picking a character was opening the keyboard.
+                    m_TappedTextEntry = false;
+
+                    if (g_SelectedObject.Object != NULL && g_SelectedObject.Object->IsGUI() &&
+                        ((CBaseGUI *)g_SelectedObject.Object)->Type == GOT_TEXTENTRY)
+                    {
+                        m_TappedTextEntry =
+                            !((CGUITextEntry *)g_SelectedObject.Object)->ReadOnly;
+                    }
                 }
             }
 
