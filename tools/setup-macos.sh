@@ -34,7 +34,7 @@ if ! command -v brew >/dev/null 2>&1; then
 fi
 
 missing=()
-for formula in cmake ninja sdl2 sdl2_image sdl2_mixer freeimage glew; do
+for formula in cmake ninja sdl2 sdl2_mixer glew; do
     brew list --formula "$formula" >/dev/null 2>&1 || missing+=("$formula")
 done
 

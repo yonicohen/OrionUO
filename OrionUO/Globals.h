@@ -135,6 +135,12 @@ extern bool g_GrayedPixels;
 extern bool g_ConfigLoaded;
 extern bool g_LogVerbose;
 
+// Set while the client is reconnecting itself after a dropped connection, so the
+// server and character screens are skipped for that attempt only. It is not the
+// Auto Login checkbox and is never written to the config.
+extern bool g_AutoReconnecting;
+extern bool g_LogVerbose;
+
 extern uchar g_LightLevel;
 extern uchar g_PersonalLightLevel;
 

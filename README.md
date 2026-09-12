@@ -1,4 +1,4 @@
-# OrionUO Client — macOS fork
+# OrionUO Client
 
 An alternative, open source Ultima Online graphic client.
 
@@ -17,8 +17,12 @@ binary, which matters for one protocol handshake (see [Known gaps](#known-gaps))
 Verified working against a live Sphere 0.56b shard: login, character creation,
 world rendering, movement, sound, text input, vendors and gump interaction.
 
-> **Just want to play?** [INSTRUCTIONS.md](INSTRUCTIONS.md) is a step-by-step
-> setup guide for the Ignis UO shard, including troubleshooting and controls.
+> **Just want to play?** Don't build anything. Grab the archive for your
+> platform from the [releases page](https://github.com/yonicohen/OrionUO/releases)
+> and run `./setup.sh` (`setup.cmd` on Windows): it asks where your Ultima
+> Online folder is and then starts the client on Ignis UO.
+> [IGNIS_UO.md](IGNIS_UO.md) has the details, troubleshooting and
+> controls.
 
 ---
 
@@ -29,21 +33,19 @@ git clone https://github.com/yonicohen/OrionUO.git
 cd OrionUO
 ```
 
-The port is merged into `master`; the `macos-port` branch is kept for history.
+The port is merged into `master`.
 
 ---
 
 ## Building
 
-### Dependencies
+### macOS
 
 Homebrew, plus:
 
 ```bash
-brew install cmake ninja sdl2 sdl2_image sdl2_mixer freeimage glew
+brew install cmake ninja sdl2 sdl2_mixer glew
 ```
-
-### Build
 
 ```bash
 cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -61,24 +63,63 @@ the runtime files:
 ./tools/setup-macos.sh /path/to/your/UltimaOnline
 ```
 
-### Notes on the build
+#### Notes on the macOS build
 
 - `cotire` (the old precompiled-header helper) is unmaintained and fails under
   CMake 4.x. It is replaced by CMake's native `target_precompile_headers`, and
   kept behind `-DORION_USE_COTIRE=ON` only for the legacy unity build.
-- The client links `sdl2-compat` rather than SDL2 proper, because Homebrew's
-  `sdl2_image`/`sdl2_mixer` depend on it. This works; if you hit odd input or
-  windowing behaviour, it is the first thing to rule out.
+- The client links `sdl2-compat` - the SDL2 API reimplemented on SDL3 - because
+  that is what Homebrew's `sdl2` formula now installs; `/opt/homebrew/opt/sdl2`
+  is a symlink into the sdl2-compat cellar. `sdl2_mixer` resolves to the same
+  library, so there is one SDL in the process, not two. Moving off it would mean
+  building SDL2 from source or porting to SDL3.
 - macOS OpenGL is deprecated but functional. The renderer is fixed-function
   GL 2.x, so it runs in the legacy profile — 2.1 via Apple's Metal-backed GL.
+
+### Windows
+
+```bat
+md build
+cd build
+cmake -G "Visual Studio 2017" ..
+```
+
+> This builds a 32-bit executable; add `Win64` to the generator name for 64-bit.
+> Plugins are unsupported in the 64-bit client.
+
+> `ORION_WISP` selects the original pure-Win32 implementation. Disabling it uses
+> the SDL path, which is what the macOS build runs on.
+
+### Linux
+
+```bash
+mkdir build && cd build
+cmake -G Ninja .. -DCMAKE_BUILD_TYPE=Release
+ninja OrionUO -j8
+./OrionUO/OrionUO
+```
+
+> As on macOS you need a `Client.cuo` and a `uo_debug.cfg` containing
+> `CustomPath=/path/to/uo/data`.
 
 ---
 
 ## Running
 
 You need a real Ultima Online installation. **No UO data files ship with this
-repository**, and they cannot be redistributed. The client reads the `.mul` /
-`.uop` files from an existing install.
+repository or with any release**, and they cannot be redistributed - they are
+EA/Broadsword copyright. The client reads the `.mul` / `.uop` files from an
+install you already have: your shard's download, or the free Classic Client
+from <https://uo.com/client-download/>.
+
+The release archives do this for you. `packaging/setup.sh` (shipped in each
+archive as `setup.sh`) symlinks the data into a `data/` directory beside the
+binary, writes `uo_debug.cfg`, generates a `Client.cuo` if the install has none,
+and launches the client. Nothing is written into your UO folder. The shard it
+connects to lives in `packaging/shard.conf`, and `packaging/play-ignis.sh`
+turns that into the client's `-login` argument.
+
+What follows is the manual equivalent, for a build tree.
 
 ### 1. Point it at your UO data
 
@@ -120,124 +161,35 @@ cd build/OrionUO
 | `-autologin 1` | Auto-select server and character. |
 | `-fastlogin` | Actually initiate the auto-login. `-autologin` alone only ticks the box. |
 
+Each option must arrive as a **single** argument, quotes included:
+`ParseCommandLine` tokenises every argument on spaces, commas and colons, so an
+unquoted `-login host,port` reaches the client as two arguments and is dropped
+without a word.
+
 `tools/version-sweep.sh` uses these to test candidate Orion versions unattended.
 
 ---
 
-## What was fixed
+## What this fork changes
 
-Most of these were latent bugs that had simply never run on a 64-bit
-little-endian target, not macOS-specific issues. Several are independently
-confirmed by CrossUO, which reached the same conclusions separately.
+The port is mostly renderer work. The short version:
 
-### Crypto (all four broke the game connection)
+- **Rendering.** Upstream drew through `glBegin`/`glEnd` immediate mode, which
+  macOS's GL profile does not have. All of it goes through a batched vertex path
+  now — a shader and a vertex buffer, with a fixed-function fallback — plus a
+  matrix stack of the client's own instead of `glTranslatef`/`glOrtho`. On top of
+  that: Retina-correct output, vsync, sharp filtering and 2x art upscaling.
+- **It connects to a live shard.** Four crypto bugs, the uninitialised login
+  seed, and several disconnect-handling faults had to be fixed before a modern
+  Sphere server would talk to it.
+- **The Windows build compiles again.** It had not since ~2018 — winsock header
+  order, missing import libraries, and 64-bit detection using a retired CMake
+  convention.
+- **Releases are built by CI** on macOS, Linux and Windows, and packaged so a
+  player can run one script instead of following a page of instructions.
 
-- **Twofish compiled big-endian on a little-endian CPU.** `Crypt/platform.h`
-  selected endianness with `#ifdef _M_IX86`, an MSVC-on-x86 macro that clang
-  never defines — so `Bswap()` swapped every word, `ADDR_XOR` reversed byte
-  extraction, and `ALIGN32` changed struct layouts. Now uses `__BYTE_ORDER__`.
-- **`typedef unsigned long u32`** in `Crypt/aes.h` — 8 bytes on LP64, doubling
-  every buffer in the Twofish key schedule and smashing the stack in `reKey()`.
-- **Blowfish box overflow.** `p_box`/`s_box` were `unsigned long` but copied into
-  `unsigned int` tables: 144→72 and 8192→4096 bytes, across 25 key tables.
-- **`CTwofishCrypt::m_IP`** was an 8-byte `unsigned long` filled by a 4-byte
-  `memcpy`, feeding uninitialised memory into the key.
-
-### Networking
-
-- **`select(h, …)` instead of `select(h + 1, …)`.** The client could send but
-  never receive anything. Winsock ignores that argument, which is why it only
-  broke off Windows. Same bug in both ICMP paths.
-- **`tcp_connect` blocked the main thread** with no timeout, freezing the client
-  for the full TCP timeout on an unreachable address. Now non-blocking with a
-  bounded wait.
-- **`SOCKADDR_IN` aliased to `in_addr`**, making `sizeof()` 4 instead of 16 where
-  it is passed as `sendto`'s address length.
-- **Login seed** was computed by passing a binary address to `inet_aton`, which
-  expects a dotted-decimal string, and writing its 0/1 return as the seed.
-- **NAT relay.** Shards behind NAT relay to their own LAN address; the client now
-  stays on the host it successfully logged in to.
-
-### Protocol
-
-- **`ReadString` returned NUL-padded fixed-width fields.** An empty 30-byte
-  character name came back as a 30-character string of NULs — non-empty to every
-  "is this slot used?" test, but printing as blank. The client believed empty
-  character slots held characters, logged in to one, and the server dropped the
-  connection.
-- **`0xBF` / `0xFACE` handshake.** Current Orion answers the version query under
-  this subcommand rather than packet `0xFC`. Shards running the stock Sphere
-  "orion exclusive" script disconnect clients that stay silent. The reply is
-  repeated across the server's 5-second window because Sphere only populates
-  `LOCAL.CHAR` once the character exists, and a reply landing earlier clears
-  nothing.
-- **Packet size table** (upstream PR #97): `== CV_6060` never matched newer
-  clients, and `0xEE`/`0xEF` used a `0x2000` placeholder instead of real lengths.
-- **Packet log timestamps** were disabled off Windows; `localtime_s` now shims to
-  `localtime_r`.
-
-### Runtime and platform
-
-- **`glPixelStorei` during static initialisation.** `CConfigManager` is a global
-  whose constructor created a GL texture before `main()` and before any GL
-  context. Windows' `opengl32` ignores GL calls with no current context; macOS'
-  `libGL` dereferences null and crashes.
-- **Main loop only ran `OnMainLoop()` when an SDL event arrived**, so networking
-  and game logic advanced only while the mouse moved — and it span at 100% CPU
-  when idle.
-- **`SetTimer`/`KillTimer` were no-ops**, so the update and auto-login timers
-  never fired. Now backed by `SDL_AddTimer`, dispatched on the main thread.
-- **`MidiInfoStruct` was `#pragma pack(1)`**, putting an 8-byte pointer at
-  unaligned offsets — the arm64 linker refuses to emit chained fixups for that.
-- **`WaveHeader` used `unsigned long`** (4 bytes on Windows, 8 on LP64), shifting
-  every field after `chunkSize`.
-- **`GetFileVersion` never set the numeric version**, so the client reported
-  version 0 to servers that check it.
-
-### Audio
-
-Every `BASS_*` call was a no-op macro off Windows — the build was completely
-silent. `Managers/SoundBackend.cpp` implements the used surface over SDL_mixer,
-leaving `CSoundManager` unchanged. Sound effects become `Mix_Chunk`s, music a
-`Mix_Music`; the MIDI soundfont (`bin/uo_4mb_2.sf2`) is copied to the build
-directory automatically.
-
-### Input
-
-- **All 27 `OnTextInput` handlers were `NOT_IMPLEMENTED`** — no text entry
-  anywhere: login, character creation, chat, books, options, bulletin boards.
-  The platform-neutral handlers now compile on all platforms with the SDL events
-  adapted onto them.
-- **`SDL_StartTextInput()` was never called**, so SDL emitted no text events.
-- **`VK_*` constants matched neither Win32 nor SDL.** `VK_BACK` was 32 (space)
-  and `VK_UP` was 8 (backspace), so space deleted characters and backspace moved
-  the caret. Only Return/Tab/Escape worked, by coincidence.
-- **Gump dragging.** The SDL handler cleared `LeftButtonPressed` *before*
-  `OnLeftMouseButtonUp()`, and `LeftDroppedOffset()` returns `(0,0)` when the
-  button reads as up — so every drag measured zero distance and no gump moved.
-- **`UnicodeTalk`/`EncodeUTF8`/`DecodeUTF8`** called unimplemented Win32 stubs,
-  so all cliloc text, tooltips, item names and outgoing unicode chat were empty.
-
-### Window
-
-- **`SDL_WINDOWEVENT_*` subtypes were compared against `ev.type`**, so the entire
-  window-event block was dead code: show/hide never reached the plugin or the
-  sound/FPS handling, and resize was never noticed.
-- The window is now created `SDL_WINDOW_RESIZABLE` with a 640×480 minimum, and
-  the game view tracks the window size.
-- **`GetSystemMetrics` returned 0**, and `SM_CYFRAME`/`SM_CYCAPTION`/
-  `SM_CXSIZEFRAME` all aliased to `SM_CXSCREEN`.
-
-### Misc
-
-- `GetSystemDefaultLangID` returned 0, which is `LANG_RUSSIAN` — the client
-  defaulted to Russian on macOS. Locale now comes from `SDL_GetPreferredLocales`.
-- Clipboard (`OpenClipboard`/`GetClipboardData`/`GlobalLock`) implemented over
-  SDL, `ShellExecuteA` over `SDL_OpenURL`, `GetLocalTime` over `localtime_r`.
-- `CommandLineToArgvW` returned nothing, so no command-line option was ever
-  parsed — including the login server. Its result is freed by the caller with
-  `LocalFree`, so it must be a `malloc`'d block.
-- Music streams leaked on every track change.
+An Android port lives on the `android-port` branch: it plays, with touch
+controls and an on-screen movement stick, but has no hue colorisation yet.
 
 ---
 
@@ -265,12 +217,17 @@ still fail unprivileged. Cosmetic only.
 
 ### Remaining stubs
 
-Twelve Win32 stubs remain `NOT_IMPLEMENTED`, all of them dead on this platform —
-they sit inside `#if USE_WISP` blocks or have working SDL equivalents:
-`_beginthreadex`/`_endthreadex` (SDL threads are used), `WideCharToMultiByte`/
-`MultiByteToWideChar` (`std::wstring_convert` is used), `WSAStartup`/`WSACleanup`,
+Twelve Win32 stubs remain `NOT_IMPLEMENTED`, and none of them is reached. Their
+callers sit inside `#if USE_WISP` blocks with working SDL equivalents on the
+`#else` side: `_beginthreadex`/`_endthreadex` (SDL threads), `WideCharToMultiByte`/
+`MultiByteToWideChar` (`std::wstring_convert`), `WSAStartup`/`WSACleanup`,
 `timeBeginPeriod`/`timeEndPeriod`, `DefWindowProc`, `AdjustWindowRectEx`,
 `CloseHandle`.
+
+`NOT_IMPLEMENTED` only prints a line to stdout, and a full session — startup,
+login, server list, in-world — logs none. The one that does run is
+`WSASetLastError(0)` in `Sockets.cpp`, and setting a Winsock error code on POSIX
+means nothing. They are dead code worth deleting for tidiness, not a gap.
 
 ---
 
@@ -287,65 +244,11 @@ they sit inside `#if USE_WISP` blocks or have working SDL equivalents:
   assumed to be 16-bit (once). If something crashes in crypto or text handling,
   look there first.
 
-### Worth doing
-
-- **`SetSize` on the window** is the last stub reachable at runtime.
-- **`CPingThread` can be constructed with an empty host** when login fails
-  before the server list arrives. Harmless, but it should be guarded.
-- The server-list log line in `ServerList.cpp` is kept deliberately — it prints
-  the names a shard advertises, which is how you notice you are connecting to
-  the wrong entry.
-- **Fold in the CrossUO fixes.** CrossUO is the maintained fork of this codebase
-  and has years of additional portability work.
-- **Stop depending on `sdl2-compat`** by building against SDL2 proper, or move to
-  SDL3 outright.
-- **Replace FreeImage** — it is unmaintained and the most awkward dependency to
-  redistribute (FIPL/GPL dual licence).
-- **Audio verification.** The SDL_mixer backend is verified for WAV sound effects
-  and music loading, but MIDI playback through fluidsynth has not been confirmed
-  against real UO music files.
-
 ### Not planned
 
 - Windows and Linux builds are untouched and should still work, but neither has
   been tested since these changes.
 - The plugin system is not portable and no attempt has been made to replace it.
-
-
----
-
-## Building on Windows and Linux
-
-Unchanged from upstream, and untested since the macOS work — it should still
-build, but treat it as unverified.
-
-This project requires CMake 3.7 or newer.
-
-### Windows
-
-```bat
-md build
-cd build
-cmake -G "Visual Studio 2017" ..
-```
-
-> This builds a 32-bit executable; add `Win64` to the generator name for 64-bit.
-> Plugins are unsupported in the 64-bit client.
-
-> `ORION_WISP` selects the original pure-Win32 implementation. Disabling it uses
-> the SDL path, which is what the macOS build runs on.
-
-### Linux
-
-```bash
-mkdir build && cd build
-cmake -G Ninja .. -DCMAKE_BUILD_TYPE=Release
-ninja OrionUO -j8
-./OrionUO/OrionUO
-```
-
-> As on macOS you need a `Client.cuo` and a `uo_debug.cfg` containing
-> `CustomPath=/path/to/uo/data`.
 
 ---
 
@@ -359,48 +262,30 @@ ninja OrionUO -j8
 
 ## Download
 
-* Download [Orion Launcher](http://orionuo.online/Launcher.html) to set everything up and play right away!
+[Releases](https://github.com/yonicohen/OrionUO/releases) carries two archives
+per platform:
+
+* `ignis-uo-*` — the client set up to play [Ignis UO](https://uo.jmaul.co.uk).
+  Unpack it, run `./setup.sh` (`setup.cmd` on Windows), point it at your Ultima
+  Online folder, and it starts. See [IGNIS_UO.md](IGNIS_UO.md).
+* `orionuo-*` — the client on its own, for a shard you configure yourself.
+
+Upstream's [Orion Launcher](http://orionuo.online/Launcher.html) is Windows only
+and does not know about this fork's builds.
 
 ### Other Orion Projects
 
 * [Orion.dll](https://github.com/Hotride/OrionDLL) protocol cryptography
 * [Orion Launcher](https://github.com/Hotride/OrionLauncher)
 
---------------
-
----
-
-## Contributing
-
-See the project planning [here](https://github.com/Hotride/OrionUO/projects) to find tasks on which you can help.
-
-  > More detailed contribution documentation soon
-
-## Contributors
-
-[Hotride](https://github.com/Hotride/) (Author)
-
-[AimedNuu](https://github.com/AimedNuu)
-
-and [Others](https://github.com/Hotride/OrionUO/graphs/contributors)
-
---------------
-## Support this project, make a donation!
-
-[PayPal](https://www.paypal.me/Hotride)
-
-WebMoney: R644829964694 Z983232789532 E400319624386
-
-Patreon: https://www.patreon.com/hotride
-
 ---
 
 ## Licensing
 
 OrionUO is MIT licensed (see `LICENSE`) — a modified binary may be redistributed
-provided the copyright notice is kept. SDL2, GLEW and zlib are permissive.
-**FreeImage is dual-licensed FIPL/GPL and its terms should be read before
-publishing binaries.**
+provided the copyright notice is kept. SDL2, GLEW, zlib and the vendored
+`third_party/stb_image_write.h` (MIT / public domain) are all permissive, so a
+built binary carries no copyleft obligation.
 
 **Do not redistribute UO data files.** They are EA/Broadsword copyrighted
 content. A bare executable is fine; a bundle containing game data is not.

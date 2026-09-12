@@ -95,6 +95,7 @@ void UnuseShader()
     glUseProgramObjectARB(0);
     ShaderColorTable = 0;
     g_ShaderDrawMode = 0;
+    g_ClientShaderActive = false;
 }
 //----------------------------------------------------------------------------------
 //-----------------------------------CGLShader--------------------------------------
@@ -233,6 +234,7 @@ bool CGLShader::Use()
     if (m_Shader != 0)
     {
         glUseProgram(m_Shader);
+        g_ClientShaderActive = true;
         result = true;
     }
 
@@ -243,12 +245,14 @@ void CGLShader::Pause()
 {
     WISPFUN_DEBUG("c32_f4");
     glUseProgramObjectARB(0);
+    g_ClientShaderActive = false;
 }
 //----------------------------------------------------------------------------------
 void CGLShader::Resume()
 {
     WISPFUN_DEBUG("c32_f5");
     glUseProgramObjectARB(m_Shader);
+    g_ClientShaderActive = (m_Shader != 0);
 }
 //----------------------------------------------------------------------------------
 //-----------------------------------CDeathShader-----------------------------------

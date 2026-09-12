@@ -6,10 +6,6 @@
 #include <android/log.h>
 #endif
 //----------------------------------------------------------------------------------
-// Declared out here, not inside the namespace below, so it is the same
-// g_LogVerbose that Globals.cpp defines.
-extern bool g_LogVerbose;
-//----------------------------------------------------------------------------------
 namespace WISP_LOGGER
 {
 //----------------------------------------------------------------------------------
@@ -35,8 +31,7 @@ namespace WISP_LOGGER
 #if defined(__ANDROID__)
 // Android discards stdout, so a client built without Wisp would log nowhere at
 // all. logcat is where every other diagnostic on the platform goes, and is what
-// `adb logcat -s OrionUO` reads. The header is included above the namespace,
-// so the names it declares stay at global scope.
+// `adb logcat -s OrionUO` reads.
 #define LOG(...) ::__android_log_print(ANDROID_LOG_INFO, "OrionUO", __VA_ARGS__)
 #else
 #define LOG(...) fprintf(stdout, " LOG: " __VA_ARGS__)
@@ -52,6 +47,7 @@ namespace WISP_LOGGER
 // Per-frame chatter - the socket poll, texture sweeps, packet sizes, the frame
 // counter - drowns everything worth reading, and a session writes megabytes of
 // it. Those calls say LOG_VERBOSE and are silent unless --verbose is passed.
+// Declared outside the namespace so it is the g_LogVerbose Globals.cpp defines.
 #define LOG_VERBOSE(...)                                                                           \
     do                                                                                             \
     {                                                                                              \

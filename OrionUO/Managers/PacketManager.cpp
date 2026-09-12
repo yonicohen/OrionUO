@@ -856,7 +856,7 @@ PACKET_HANDLER(ResendCharacterList)
     g_CharacterList.Count = numSlots;
 
     int autoPos = -1;
-    bool autoLogin = g_MainScreen.m_AutoLogin->Checked;
+    bool autoLogin = g_MainScreen.m_AutoLogin->Checked || g_AutoReconnecting;
     bool haveCharacter = false;
 
     if (numSlots == 0)

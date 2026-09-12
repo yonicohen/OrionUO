@@ -28,9 +28,6 @@
 #endif
 #include <SDL2/SDL.h>
 #include <zlib.h>
-#if !defined(ORION_GLES)
-#include <FreeImage.h>
-#endif
 
 using namespace std;
 
@@ -87,21 +84,19 @@ using namespace std;
 #pragma GCC diagnostic ignored "-Wuninitialized"
 #endif
 
-typedef int SOCKET;
-typedef uint16_t WORD;
-#if defined(ORION_GLES)
-// On desktop POSIX builds FreeImage.h supplies this. FreeImage is only used by
-// ScreenshotBuilder, so it is not built for Android, and the type has to come
-// from somewhere.
+// DWORD and BOOL used to arrive by way of FreeImage.h, which defines the
+// Windows spellings on POSIX. FreeImage is gone, so they are declared here
+// with the rest of them.
 typedef uint32_t DWORD;
 typedef int BOOL;
-#if !defined(TRUE)
-#define TRUE 1
-#endif
-#if !defined(FALSE)
+#ifndef FALSE
 #define FALSE 0
 #endif
+#ifndef TRUE
+#define TRUE 1
 #endif
+typedef int SOCKET;
+typedef uint16_t WORD;
 typedef uintptr_t LPARAM;
 typedef uintptr_t LRESULT;
 typedef uintptr_t WPARAM;

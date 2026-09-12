@@ -24,14 +24,17 @@ jobs:
           - name: macOS (arm64)
             runner: macos-latest
             artifact: orionuo-macos-arm64
+            ignis: ignis-uo-macos-arm64
             binary: build/OrionUO/OrionUO
           - name: Linux (x86_64)
             runner: ubuntu-latest
             artifact: orionuo-linux-x86_64
+            ignis: ignis-uo-linux-x86_64
             binary: build/OrionUO/OrionUO
           - name: Windows (x64)
             runner: windows-latest
             artifact: orionuo-windows-x64
+            ignis: ignis-uo-windows-x64
             binary: build/OrionUO/Release/OrionUO.exe
     steps:
       - uses: actions/checkout@v4
@@ -56,7 +59,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew update
-          brew install cmake ninja sdl2 sdl2_image sdl2_mixer freeimage glew
+          brew install cmake ninja sdl2 sdl2_mixer glew
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
@@ -64,8 +67,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             ninja-build cmake \
-            libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev \
-            libfreeimage-dev libglew-dev libglu1-mesa-dev xorg-dev
+            libsdl2-dev libsdl2-mixer-dev \
+            libglew-dev libglu1-mesa-dev xorg-dev
 
       - name: Build (Unix)
         if: runner.os != 'Windows'
@@ -84,8 +87,9 @@ jobs:
       # also the bundled DLLs. OrionData is not copied: the client generates it on
       # first run.
       #
-      # UO's own data files are never redistributed. They are copyright, and
-      # INSTRUCTIONS.md explains how to point the client at your shard's copy.
+      # UO's own data files are never redistributed. They are copyright. The
+      # setup script in the package links them out of an install the player
+      # already has; see IGNIS_UO.md.
       - name: Package
         shell: bash
         run: |
@@ -94,7 +98,7 @@ jobs:
 
           mkdir -p package
           cp "${{ matrix.binary }}" package/
-          cp README.md INSTRUCTIONS.md package/
+          cp README.md package/
 
           # Everything the build staged beside the binary, skipping CMake's own
           # bookkeeping and anything the client wrote while being built.
@@ -107,14 +111,52 @@ jobs:
             cp -R "$staged" package/ || true
           done
 
-          echo "Packaged:"
+          if [ "$RUNNER_OS" != "Windows" ]; then
+            chmod +x package/OrionUO
+          fi
+
+          # Two downloads per platform. The plain client is just that - the
+          # client, for anyone who already has a shard set up and does not want
+          # our launcher deciding things for them.
+          echo "Packaged (client):"
           ls -la package
           tar -czf "${{ matrix.artifact }}.tar.gz" -C package .
+
+          # The Ignis package is the same client with the server already chosen
+          # and a setup script: shard.conf names the server, the launcher passes
+          # it to the client as -login, and setup stages the player's own UO data
+          # next to the binary. make_client_cuo.py is what lets a stock uo.com
+          # install work - it has no Client.cuo, which only the Windows-only
+          # Orion Launcher normally writes.
+          cp -R package ignis
+          cp IGNIS_UO.md ignis/
+          cp packaging/shard.conf ignis/
+          # The icon for the app bundle setup.sh builds on macOS.
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            cp packaging/OrionUO.icns ignis/
+          fi
+          cp tools/make_client_cuo.py ignis/
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp packaging/setup.cmd packaging/setup.ps1 packaging/play-ignis.cmd ignis/
+          else
+            cp packaging/setup.sh packaging/play-ignis.sh ignis/
+            chmod +x ignis/setup.sh ignis/play-ignis.sh ignis/OrionUO
+          fi
+
+          echo "Packaged (Ignis):"
+          ls -la ignis
+          tar -czf "${{ matrix.ignis }}.tar.gz" -C ignis .
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.tar.gz
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.ignis }}
+          path: ${{ matrix.ignis }}.tar.gz
           if-no-files-found: error
 
   publish:
@@ -135,11 +177,38 @@ jobs:
           generate_release_notes: true
           files: artifacts/**/*.tar.gz
           body: |
-            Builds of the macOS port of OrionUO.
+            Two downloads per platform.
 
-            **The UO data files are not included.** They are copyright and cannot be
-            redistributed; you need them from your shard. See INSTRUCTIONS.md in the
-            archive for the setup, which is four steps.
+            **`ignis-uo-*`** - the client set up to play
+            [Ignis UO](https://uo.jmaul.co.uk) (`uo.jmaul.co.uk:2593`). Unpack it
+            and run the setup script; it asks where your Ultima Online folder is,
+            links the data in and starts the game.
+
+            ```
+            mkdir ignis && tar -xzf ignis-uo-macos-arm64.tar.gz -C ignis
+            cd ignis && ./setup.sh
+            ```
+
+            On Windows, double-click `setup.cmd`. Afterwards `play-ignis.sh` /
+            `play-ignis.cmd` starts the game directly.
+
+            **`orionuo-*`** - the client on its own, with no shard chosen and no
+            setup script. Run it from a folder containing UO's data files, and
+            point it at a server yourself:
+
+            ```
+            ./OrionUO "-login your.shard.example,2593"
+            ```
+
+            The quotes matter: the argument parser splits on spaces and commas, so
+            an unquoted `-login` is ignored and the client falls back to
+            `login.cfg`.
+
+            **The UO data files are not included** in either download. They are
+            EA/Broadsword copyright and cannot be redistributed. Bring them from an
+            install you already have - your shard's download, or the free Classic
+            Client from https://uo.com/client-download/ . Setup links them in place:
+            nothing is copied into your UO folder and nothing there is modified.
 
             The Windows and Linux builds come from the same source but have had far
             less use than the macOS one, which is the platform this port was made for.

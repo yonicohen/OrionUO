@@ -1,0 +1,9 @@
+# Windows shells are happier with CRLF, and these files are only ever read by
+# cmd.exe and PowerShell.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Shell scripts must keep LF wherever they are checked out, or the shebang line
+# ends in a carriage return and the script will not run at all.
+*.sh text eol=lf

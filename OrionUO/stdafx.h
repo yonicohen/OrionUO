@@ -69,7 +69,6 @@
 #include "../Dependencies/include/wglew.h"
 #include "../Dependencies/include/bass.h"
 #include "../Dependencies/include/bassmidi.h"
-#include "../Dependencies/include/FreeImage.h"
 #include "../Dependencies/include/zlib.h"
 
 #pragma comment(lib, "Winmm.lib")

@@ -439,7 +439,11 @@ if(ORION_WINDOWS)
     ws2_32
     Psapi)
 else()
-  target_link_libraries(OrionUO PUBLIC ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES} ${SDL2_MIXER_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENGL_LIBRARIES} ${FREEIMAGE_LIBRARIES} ${GLEW_LIBRARIES} ${THREAD})
+  # SDL2_image is deliberately absent: nothing in the client calls IMG_*, and on
+# Homebrew it is the one dependency built against sdl2-compat while sdl2_mixer
+# is built against SDL2 proper - linking both put two SDL2 implementations, each
+# with its own globals and event queue, into one process.
+target_link_libraries(OrionUO PUBLIC ${SDL2_LIBRARIES} ${SDL2_MIXER_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES} ${THREAD})
 endif()
 
 orion_precompile(OrionUO)

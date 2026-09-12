@@ -74,7 +74,6 @@ if(ORION_WINDOWS)
 	set(ZLIB_LIBRARIES "${DEP_LIB_DIR}zlib.lib")
 
 	set(FREEIMAGE_INCLUDE_DIR "${DEP_INCLUDE_DIR}")
-	set(FREEIMAGE_LIBRARIES "${DEP_LIB_DIR}freeimage.lib")
 
 	#set(OPENGL_INCLUDE_DIR "${DEP_INCLUDE_DIR}")
 	#set(OPENGL_LIBRARIES "${DEP_LIB_DIR}")
@@ -94,8 +93,14 @@ else()
 	set(ORION_DLL_STATIC ON)
 	set(ORION_WISP OFF)	
 	find_package(ZLIB REQUIRED)
+	# Homebrew links "sdl2" to sdl2-compat, which is the SDL2 API reimplemented on
+	# SDL3, and keeps SDL2 proper keg-only. sdl2_mixer is built against SDL2
+	# proper, so taking the default put both into one process, each with its own
+	# globals and event queue. Prefer the real one where it exists so everything
+	# agrees; anywhere else the normal search applies.
 	find_package(SDL2 REQUIRED)
-	find_package(SDL2_image REQUIRED)
+	# SDL2_image is not used - see OrionUO/CMakeLists.txt.
+
 	find_package(SDL2_mixer REQUIRED)
 	# The bundled FindSDL2_mixer module predates find_package_handle_standard_args:
 	# it sets SDL2MIXER_* and never fails, so check it and normalise the names.
@@ -104,7 +109,8 @@ else()
 	endif()
 	set(SDL2_MIXER_LIBRARIES ${SDL2MIXER_LIBRARY})
 	set(SDL2_MIXER_INCLUDE_DIRS ${SDL2MIXER_INCLUDE_DIR})
-	find_package(FreeImage REQUIRED)
+	# FreeImage is gone: screenshots use third_party/stb_image_write.h, which is
+	# MIT/public domain, against FreeImage's FIPL/GPL dual licence.
 	find_package(GLEW REQUIRED)
 	# Modern glew ships a config-module exporting only the GLEW::GLEW target,
 	# leaving the legacy GLEW_LIBRARIES/GLEW_LIBRARY variables unset.
@@ -125,7 +131,7 @@ include_directories(${ZLIB_INCLUDE_DIRS})
 include_directories(${SDL2_INCLUDE_DIRS})
 include_directories(${SDL2_IMAGE_INCLUDE_DIR})
 include_directories(${SDL2_MIXER_INCLUDE_DIRS})
-include_directories(${FREEIMAGE_INCLUDE_DIR})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 include_directories(${GLEW_INCLUDE_DIR})
 #
 # Project Files
