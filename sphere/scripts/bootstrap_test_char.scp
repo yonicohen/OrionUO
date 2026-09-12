@@ -1,0 +1,50 @@
+// Gives an account a character the first time it logs in, so a client can be
+// driven into the world without anyone clicking through character creation.
+// Called from f_onaccount_login with the account name as ARGS.
+//
+// The character is dressed in deliberately different hues: a renderer can then
+// be checked against something with a known answer.
+
+[FUNCTION f_bootstrap_test_char]
+IF (<SERV.ACCOUNT.<ARGS>.CHARS> > 0)
+    RETURN 0
+ENDIF
+
+SERV.NEWNPC=c_man
+LOCAL.CH=<NEW.UID>
+NEW.NAME=Tester
+NEW.ACCOUNT=<ARGS>
+NEW.P=1323,1624,55,0
+// A bare c_man has no stats and dies on the first world tick.
+NEW.STR=100
+NEW.DEX=100
+NEW.INT=100
+NEW.MAXHITS=100
+NEW.HITS=100
+NEW.MAXSTAM=100
+NEW.STAM=100
+NEW.MAXMANA=100
+NEW.MANA=100
+
+SERV.NEWITEM=i_robe
+NEW.COLOR=033
+NEW.CONT=<LOCAL.CH>
+
+SERV.NEWITEM=i_shirt_fancy
+NEW.COLOR=07D0
+NEW.CONT=<LOCAL.CH>
+
+SERV.NEWITEM=i_pants_long
+NEW.COLOR=0489
+NEW.CONT=<LOCAL.CH>
+
+SERV.NEWITEM=i_boots_thigh
+NEW.COLOR=0021
+NEW.CONT=<LOCAL.CH>
+
+SERV.NEWITEM=i_sword_broad
+NEW.COLOR=0026
+NEW.CONT=<LOCAL.CH>
+
+SERV.LOG BOOTSTRAP created UID=<LOCAL.CH> for '<ARGS>', dressed
+RETURN 0
