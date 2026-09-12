@@ -92,6 +92,7 @@ private:
     const float *m_LastVertices = nullptr;
 
     void BindState(const float *vertices, GLsizei stride, int vertexCount);
+    void ReleaseState();
 
 
 

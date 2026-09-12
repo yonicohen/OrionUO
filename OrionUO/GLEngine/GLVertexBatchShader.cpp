@@ -395,6 +395,35 @@ void CGLVertexBatchShader::Draw(
     BindState(vertices, stride, vertexCount);
 
     glDrawArrays(mode, 0, vertexCount);
+
+#if !defined(ORION_GLES)
+    // Everything goes back as it was found. The desktop build still has a fixed
+    // function pipeline, and the client's own shaders are drawn through it -
+    // with a buffer object left bound, glVertexPointer reads its pointer as an
+    // offset into that buffer instead of as an address, and those draws come out
+    // as garbage. Keeping state between draws is a mobile concern and stays one.
+    ReleaseState();
+#endif
+}
+//----------------------------------------------------------------------------------
+void CGLVertexBatchShader::ReleaseState()
+{
+    if (m_Active->AttribNormal >= 0)
+        glDisableVertexAttribArray(m_Active->AttribNormal);
+
+    if (m_Active->AttribColor >= 0)
+        glDisableVertexAttribArray(m_Active->AttribColor);
+
+    if (m_Active->AttribTexCoord >= 0)
+        glDisableVertexAttribArray(m_Active->AttribTexCoord);
+
+    if (m_Active->AttribPosition >= 0)
+        glDisableVertexAttribArray(m_Active->AttribPosition);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glUseProgram(0);
+
+    InvalidateState();
 }
 //----------------------------------------------------------------------------------
 // Points the attributes at this batch's vertices, and leaves everything bound.
