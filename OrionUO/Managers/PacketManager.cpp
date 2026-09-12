@@ -5825,6 +5825,7 @@ PACKET_HANDLER(OrionMessages)
         case OCT_ORION_FEATURES:
         {
             g_OrionFeaturesFlags = ReadUInt32BE();
+            LOG("ORION features received from server: 0x%08X\n", g_OrionFeaturesFlags);
 
             g_ConfigManager.UpdateFeatures();
 
