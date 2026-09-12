@@ -37,6 +37,13 @@ struct CTouchStick
     bool ButtonHeld = false;
     // Being carried to a new spot rather than pressed.
     bool ButtonMoving = false;
+
+    // A grip on the rim of the ring, for carrying it somewhere else. Steering
+    // the ring and picking it up are both a thumb on the ring, so one of them
+    // has to have a place of its own to be pressed.
+    int GripX = 0;
+    int GripY = 0;
+    int GripRadius = 0;
 };
 extern CTouchStick g_TouchStick;
 //----------------------------------------------------------------------------------

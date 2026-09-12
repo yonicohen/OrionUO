@@ -81,6 +81,12 @@ echo "linking apk"
 # --version-code and --version-name only *inject* a value when the manifest has
 # none, and ours carries a placeholder, so without --replace-version every
 # release came out as the 1.0 written there.
+# A local build has to outrank whatever release is on the device, or Android
+# refuses it as a downgrade - which it did silently for a while, leaving a phone
+# running a release build while every "fix" was reported as installed.
+: "${ANDROID_VERSION_CODE:=900000}"
+: "${ANDROID_VERSION_NAME:=dev}"
+
 version_args=()
 [[ -n "${ANDROID_VERSION_CODE:-}" ]] && version_args+=(--version-code "$ANDROID_VERSION_CODE")
 [[ -n "${ANDROID_VERSION_NAME:-}" ]] && version_args+=(--version-name "$ANDROID_VERSION_NAME")

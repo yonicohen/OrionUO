@@ -1661,6 +1661,43 @@ void CGameScreen::DrawTouchStick()
     glColor4f(0.95f, 0.86f, 0.60f, ringAlpha * 0.9f);
     g_GL.DrawCircle(knobX - knobRadius * 0.18f, knobY - knobRadius * 0.18f, knobRadius * 0.34f, 0);
 
+    // The grip, on the ring's upper-left rim. Steering the ring and carrying it
+    // are both a thumb on the ring, so carrying it needs somewhere of its own to
+    // be pressed - and somewhere visible, because a gesture nobody can find is
+    // the same as one that is not there.
+    const float gripRadius = (float)g_TouchStick.GripRadius;
+    const float gripX = (float)g_TouchStick.GripX;
+    const float gripY = (float)g_TouchStick.GripY;
+
+    // Drawn at full strength whatever the ring is doing: it is the one part of
+    // this that has to be noticed without being looked for.
+    const float gripAlpha = g_TouchStick.Active ? 1.0f : 0.85f;
+
+    glColor4f(0.05f, 0.04f, 0.02f, gripAlpha);
+    g_GL.DrawCircle(gripX, gripY, gripRadius, 0);
+
+    if (g_TouchStick.Moving)
+        glColor4f(0.45f, 0.85f, 0.45f, gripAlpha);
+    else
+        glColor4f(0.88f, 0.74f, 0.38f, gripAlpha);
+
+    g_GL.DrawCircle(gripX, gripY, gripRadius * 0.78f, 0);
+
+    // A four way arrow, so it reads as "drag me" rather than as another stone.
+    const float arm = gripRadius * 0.58f;
+    const float head = gripRadius * 0.24f;
+    const float bar = gripRadius * 0.14f;
+
+    glColor4f(0.10f, 0.08f, 0.04f, gripAlpha);
+    g_GL.DrawPolygone((int)(gripX - arm), (int)(gripY - bar / 2), (int)(arm * 2), (int)bar);
+    g_GL.DrawPolygone((int)(gripX - bar / 2), (int)(gripY - arm), (int)bar, (int)(arm * 2));
+
+    // Heads, as small squares on the ends - four triangles would need a mesh.
+    g_GL.DrawPolygone((int)(gripX - arm), (int)(gripY - head), (int)head, (int)(head * 2));
+    g_GL.DrawPolygone((int)(gripX + arm - head), (int)(gripY - head), (int)head, (int)(head * 2));
+    g_GL.DrawPolygone((int)(gripX - head), (int)(gripY - arm), (int)(head * 2), (int)head);
+    g_GL.DrawPolygone((int)(gripX - head), (int)(gripY + arm - head), (int)(head * 2), (int)head);
+
     // War/peace, in the paperdoll's own art: 0x07E5 reads WAR and is shown while
     // at peace, 0x07E8 reads PEACE and is shown while at war - the label is what
     // the button will do, which is how UO words it.

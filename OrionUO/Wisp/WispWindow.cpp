@@ -771,11 +771,22 @@ namespace
 // drag - so that touching the world does what touching it looks like it should.
 // Walking is the on-screen stick instead, which is both easier to aim and does
 // not fight everything else a press might have meant.
-const int TouchSlop = 16;        // pixels of travel before a press is a drag
+// Sixteen pixels is about a millimetre and a half on a screen this dense, which
+// no fingertip holds still inside: every touch travelled further than that and
+// so was read as a drag rather than a tap.
+const int TouchSlop = 26;        // pixels of travel before a press is a drag
+// Whether it turned out to be a tap after all is decided on the way up, by how
+// far and how long, rather than by which branch the press took on the way down.
+const int TapTravel = 64;
+const uint TapDuration = 400;
+// A fingertip is neither as quick nor as steady as a mouse, and the client's own
+// 350ms/one-pixel double click is far too strict for one: two deliberate taps
+// land tens of pixels and half a second apart.
+const uint DoubleTapDelay = 600;
+const int DoubleTapSlop = 64;
 
 // How long the stick has to be held still, thumb centred, before it stops
 // steering and starts being dragged somewhere else.
-const uint StickMoveDelay = 450;
 
 struct
 {
@@ -822,6 +833,9 @@ bool g_StickPlaceLoaded = false;
 SDL_FingerID g_ButtonFinger = 0;
 // When a finger event last arrived; the stale-press watchdog goes by this.
 uint g_LastTouchEventTicks = 0;
+// The last tap, for spotting the second one of a pair.
+uint g_LastTapTicks = 0;
+WISP_GEOMETRY::CPoint2Di g_LastTapAt;
 
 // Where the stick sits, and how hard it has to be pushed. The ring is parked in
 // the bottom-left corner of the window, out of the way of the status bar and
@@ -1026,9 +1040,12 @@ static void UpdateTouchStickBounds()
     const WISP_GEOMETRY::CSize size = g_WispWindow->GetSize();
     const int shorter = (size.Width < size.Height) ? size.Width : size.Height;
 
-    g_TouchStick.Radius = shorter / 10;
-    if (g_TouchStick.Radius < 56)
-        g_TouchStick.Radius = 56;
+    // A seventh of the short side. A tenth looked right beside the world but is
+    // a small thing to aim a thumb at, and left the grip on its rim smaller
+    // still - too small to read as something to be pressed.
+    g_TouchStick.Radius = shorter / 7;
+    if (g_TouchStick.Radius < 72)
+        g_TouchStick.Radius = 72;
 
     if (g_StickPlaceX >= 0.0f)
     {
@@ -1063,6 +1080,12 @@ static void UpdateTouchStickBounds()
                 g_TouchStick.CenterY + g_TouchStick.Radius + g_TouchStick.ButtonRadius + 14;
         }
     }
+
+    // On the upper-left rim, away from the war toggle above and from where a
+    // right handed thumb rests.
+    g_TouchStick.GripRadius = g_TouchStick.Radius / 3;
+    g_TouchStick.GripX = g_TouchStick.CenterX - (int)(g_TouchStick.Radius * 0.72f);
+    g_TouchStick.GripY = g_TouchStick.CenterY - (int)(g_TouchStick.Radius * 0.72f);
 
     g_TouchStick.Visible = (g_GameState >= GS_GAME);
     g_TouchStick.Active = g_Stick.Active;
@@ -1208,29 +1231,6 @@ static bool TouchStickCentred()
 
     return deflection * g_TouchStick.Radius < StickDeadZone;
 }
-//----------------------------------------------------------------------------------
-// Resting rather than steering, for the hold that picks the ring up. A thumb
-// held still anywhere off centre is a request to keep walking that way, so this
-// cannot simply ask whether the finger has moved - but the dead zone that marks
-// a step as "not walking" is six pixels across, which is no target at all to aim
-// a thumb at deliberately. The inner third of the ring is.
-static bool TouchStickIdle()
-{
-    const float deflection =
-        sqrtf(g_TouchStick.OffsetX * g_TouchStick.OffsetX +
-              g_TouchStick.OffsetY * g_TouchStick.OffsetY);
-
-    if (deflection >= 1.0f / 3.0f)
-        return false;
-
-    // And it has not been pushed at all since it landed. Steering means moving
-    // the thumb out from where it went down, so a finger that has not moved is
-    // not steering however close to the centre a resting thumb happens to sit.
-    const int dx = g_Stick.CurrentAt.X - g_Stick.DownAt.X;
-    const int dy = g_Stick.CurrentAt.Y - g_Stick.DownAt.Y;
-
-    return (dx * dx + dy * dy < TouchSlop * TouchSlop);
-}
 #endif
 //----------------------------------------------------------------------------------
 void CWindow::ProcessTouch()
@@ -1242,23 +1242,6 @@ void CWindow::ProcessTouch()
     // poll, and a finger held still on the ring sends no events.
     if (g_Stick.Active)
     {
-        // Held still rather than pushed: the thumb is not steering, so take it
-        // as a request to put the ring somewhere else. This used to ask for the
-        // finger to be within the dead zone of the exact centre, which is a six
-        // pixel target and was all but impossible to hit on purpose. What it
-        // needs to know is only that the finger has not moved.
-        if (!g_Stick.Moving && TouchStickIdle() &&
-            SDL_GetTicks() - g_Stick.DownTicks >= StickMoveDelay)
-        {
-            g_Stick.Moving = true;
-
-            if (g_Stick.RightDown)
-            {
-                g_Stick.RightDown = false;
-                TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, TouchStickToCursor());
-            }
-        }
-
         if (!g_Stick.Moving && !TouchStickCentred() && g_GameState >= GS_GAME)
             TouchStickWalk();
     }
@@ -1441,6 +1424,27 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
                 }
             }
 
+            // The grip carries the ring, with no timing to get right: pressing
+            // it is already the whole gesture.
+            if (g_TouchStick.Visible && !g_Stick.Active)
+            {
+                const int dx = down.X - g_TouchStick.GripX;
+                const int dy = down.Y - g_TouchStick.GripY;
+                const int reach = g_TouchStick.GripRadius + g_TouchStick.GripRadius / 2;
+
+                if (dx * dx + dy * dy <= reach * reach)
+                {
+                    g_Stick.Finger = ev.tfinger.fingerId;
+                    g_Stick.Active = true;
+                    g_Stick.RightDown = false;
+                    g_Stick.Moving = true;
+                    g_Stick.DownTicks = SDL_GetTicks();
+                    g_Stick.DownAt = down;
+                    g_Stick.CurrentAt = down;
+                    break;
+                }
+            }
+
             // The stick takes the finger before any of the gesture logic does,
             // and keeps its own, so walking and handling something at the same
             // time are two separate fingers rather than a conflict.
@@ -1594,22 +1598,75 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
 
             const WISP_GEOMETRY::CPoint2Di at = g_Touch.Current;
 
+            const uint now = SDL_GetTicks();
+            const int moveX = at.X - g_Touch.Start.X;
+            const int moveY = at.Y - g_Touch.Start.Y;
+
+            // A press that went nowhere and did not last is a tap, whether or
+            // not the finger wandered far enough on the way to have started a
+            // drag. Deciding this only on the way down meant a press that had
+            // once crossed the slop could never be a tap again, and on a dense
+            // screen that was every press there is.
+            const bool wasTap =
+                (!g_Touch.RightDown && now - g_Touch.StartTicks <= TapDuration &&
+                 moveX * moveX + moveY * moveY < TapTravel * TapTravel);
+
+
             if (g_Touch.RightDown)
                 TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, at);
-            else if (g_Touch.LeftDown)
+            else if (!wasTap && g_Touch.LeftDown)
                 TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, at);
             else
             {
-                // Lifted before either the hold delay or the drag threshold: a
-                // tap, which is a left click. The press and release go through
-                // together so the double-click timer sees a complete click.
-                TouchMouseEvent(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT, at);
-                TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, at);
+                const int tapX = at.X - g_LastTapAt.X;
+                const int tapY = at.Y - g_LastTapAt.Y;
 
-                // Whatever the tap landed on, re-ask for the keyboard if a text
-                // field ends up focused: tapping a field the client already
-                // considered focused is exactly how someone brings it back.
-                m_TextInputDirty = true;
+                const bool secondTap =
+                    (g_LastTapTicks != 0 && now - g_LastTapTicks <= DoubleTapDelay &&
+                     tapX * tapX + tapY * tapY < DoubleTapSlop * DoubleTapSlop);
+
+                // Tapped twice on a gump, on nothing in particular: that closes
+                // it. UO closes a gump with the right button, which a touch
+                // screen has no way of producing, so without this there is no
+                // way to close one at all.
+                //
+                // Only where the client has nothing else bound. Anything
+                // carrying a serial - an item in a container, a button - is
+                // something a double click already means something to, and
+                // using an item has to keep working.
+
+                if (secondTap && g_SelectedObject.Gump != NULL && !g_SelectedObject.Serial)
+                {
+                    // A drag was already begun if the finger wandered on the
+                    // way; end it where it started so the gump is not left
+                    // nudged a few pixels by the press that closed it.
+                    if (g_Touch.LeftDown)
+                        TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, g_Touch.Start);
+
+                    TouchMouseEvent(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_RIGHT, at);
+                    TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, at);
+                    g_LastTapTicks = 0;
+                }
+                else
+                {
+                    // A tap is a left click. The press and release go through
+                    // together so the double-click timer sees a complete click;
+                    // if a drag already sent the press, only the release is
+                    // still owed.
+                    if (!g_Touch.LeftDown)
+                        TouchMouseEvent(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT, at);
+
+                    TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, at);
+
+                    g_LastTapTicks = now;
+                    g_LastTapAt = at;
+
+                    // Whatever the tap landed on, re-ask for the keyboard if a
+                    // text field ends up focused: tapping a field the client
+                    // already considered focused is exactly how someone brings
+                    // it back.
+                    m_TextInputDirty = true;
+                }
             }
 
             g_Touch.Active = false;
