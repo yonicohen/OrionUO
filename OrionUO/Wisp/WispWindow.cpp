@@ -1009,12 +1009,21 @@ void CWindow::UpdateTextInput(bool wanted)
     // immersive mode to find somewhere to appear, and it carries the chat modes.
     // Something taking focus opens it - once, on the change, so that closing it
     // while a field is still focused does not reopen it every frame.
+    // Three ways to ask for it, because one is not enough: something became
+    // focused when nothing was, focus moved to a different field, or a field was
+    // tapped. The last matters most - on the login screen a field is focused
+    // before the screen is even drawn, so waiting for a change meant the
+    // keyboard opened once at start-up and never again.
     const bool changed = (wanted != m_TextInputActive);
+    const bool focusMoved = (g_EntryPointer != m_LastTextEntry);
+    const bool tappedField = m_TextInputDirty && m_TappedTextEntry;
 
     m_TextInputActive = wanted;
+    m_LastTextEntry = g_EntryPointer;
     m_TextInputDirty = false;
+    m_TappedTextEntry = false;
 
-    if (changed && wanted && g_GumpKeyboard == NULL)
+    if (wanted && g_GumpKeyboard == NULL && (changed || focusMoved || tappedField))
         ToggleKeyboardGump();
 #else
     (void)wanted;
@@ -1700,11 +1709,14 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
                     g_LastTapTicks = now;
                     g_LastTapAt = at;
 
-                    // Whatever the tap landed on, re-ask for the keyboard if a
-                    // text field ends up focused: tapping a field the client
-                    // already considered focused is exactly how someone brings
-                    // it back.
+                    // Tapping a field is how someone says they want to type,
+                    // even when the client already considered it focused - which
+                    // it always does on the login screen, where something is
+                    // focused from the moment it appears.
                     m_TextInputDirty = true;
+                    m_TappedTextEntry =
+                        (g_SelectedObject.Object != NULL && g_SelectedObject.Object->IsGUI() &&
+                         ((CBaseGUI *)g_SelectedObject.Object)->Type == GOT_TEXTENTRY);
                 }
             }
 
