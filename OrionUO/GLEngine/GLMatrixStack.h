@@ -49,6 +49,7 @@ public:
     void Pop();
 
     void Translate(float x, float y, float z);
+    void Scale(float x, float y, float z);
     void Rotate(float degrees, float x, float y, float z);
 
     void Ortho(float left, float right, float bottom, float top, float nearZ, float farZ);

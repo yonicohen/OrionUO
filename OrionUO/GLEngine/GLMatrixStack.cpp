@@ -61,6 +61,24 @@ void CGLMatrixStack::LoadIdentity()
     }
 }
 //----------------------------------------------------------------------------------
+void CGLMatrixStack::Scale(float x, float y, float z)
+{
+    // Scaling multiplies the three basis columns, leaving the translation alone -
+    // the same shortcut Translate takes, for the same reason.
+    for (int row = 0; row < 4; row++)
+    {
+        m_ModelView[row] *= x;
+        m_ModelView[4 + row] *= y;
+        m_ModelView[8 + row] *= z;
+    }
+
+    if (m_ForwardToGL)
+    {
+        glMatrixMode(GL_MODELVIEW);
+        glScalef(x, y, z);
+    }
+}
+//----------------------------------------------------------------------------------
 void CGLMatrixStack::Push()
 {
     m_Stack.push_back(std::vector<float>(m_ModelView, m_ModelView + 16));

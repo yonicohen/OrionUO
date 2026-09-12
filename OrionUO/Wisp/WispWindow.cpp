@@ -770,7 +770,7 @@ const int TouchSlop = 16;        // pixels of travel before a press is a drag
 
 // How long the stick has to be held still, thumb centred, before it stops
 // steering and starts being dragged somewhere else.
-const uint StickMoveDelay = 600;
+const uint StickMoveDelay = 450;
 
 struct
 {
@@ -970,9 +970,9 @@ static void UpdateTouchStickBounds()
     const WISP_GEOMETRY::CSize size = g_WispWindow->GetSize();
     const int shorter = (size.Width < size.Height) ? size.Width : size.Height;
 
-    g_TouchStick.Radius = shorter / 7;
-    if (g_TouchStick.Radius < 70)
-        g_TouchStick.Radius = 70;
+    g_TouchStick.Radius = shorter / 10;
+    if (g_TouchStick.Radius < 56)
+        g_TouchStick.Radius = 56;
 
     if (g_StickPlaceX >= 0.0f)
     {

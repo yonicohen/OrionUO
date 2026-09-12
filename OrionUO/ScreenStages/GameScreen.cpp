@@ -1612,42 +1612,74 @@ void CGameScreen::DrawTouchStick()
     if (!g_TouchStick.Visible || g_TouchStick.Radius <= 0)
         return;
 
-    const float centerX = (float)g_TouchStick.CenterX;
-    const float centerY = (float)g_TouchStick.CenterY;
-    const float radius = (float)g_TouchStick.Radius;
+    // Drawn from the client's own art rather than plain circles, so the touch
+    // controls belong to the same interface as everything else: 0x1393 is the
+    // ornate ring UO frames the minimap with, and the war toggle is the very
+    // button the paperdoll uses for it.
+    const float ringAlpha = g_TouchStick.Active ? 0.95f : 0.55f;
 
-    // Faint while it is being used, fainter while it is not: it sits over the
-    // world and is only worth looking at when a thumb is on it.
-    const float ringAlpha = g_TouchStick.Active ? 0.30f : 0.17f;
+    // CGLTexture's width/height draw TILES the art rather than scaling it, so
+    // anything resized here is drawn at its natural size under a scale on the
+    // matrix stack instead.
+    CGLTexture *ring = g_Orion.ExecuteGump(0x1393);
 
-    glColor4f(0.0f, 0.0f, 0.0f, ringAlpha);
-    g_GL.DrawCircle(centerX, centerY, radius, 0);
+    if (ring != NULL && ring->Width > 0)
+    {
+        const float scale = (float)(g_TouchStick.Radius * 2) / (float)ring->Width;
 
-    glColor4f(1.0f, 1.0f, 1.0f, ringAlpha);
-    g_GL.DrawCircle(centerX, centerY, radius * 0.94f, 1);
+        glColor4f(1.0f, 1.0f, 1.0f, ringAlpha);
 
-    const float knobRadius = radius * 0.38f;
-    const float knobX = centerX + g_TouchStick.OffsetX * (radius - knobRadius);
-    const float knobY = centerY + g_TouchStick.OffsetY * (radius - knobRadius);
+        g_GLMatrix.Push();
+        g_GLMatrix.Translate((float)g_TouchStick.CenterX, (float)g_TouchStick.CenterY, 0.0f);
+        g_GLMatrix.Scale(scale, scale, 1.0f);
+        ring->Draw(-ring->Width / 2, -ring->Height / 2, false);
+        g_GLMatrix.Pop();
+    }
+    else
+    {
+        glColor4f(0.0f, 0.0f, 0.0f, ringAlpha * 0.4f);
+        g_GL.DrawCircle((float)g_TouchStick.CenterX, (float)g_TouchStick.CenterY, (float)g_TouchStick.Radius, 0);
+    }
 
-    glColor4f(1.0f, 1.0f, 1.0f, g_TouchStick.Active ? 0.55f : 0.30f);
+    // The knob: a small gold stone that sits in the ring and follows the thumb.
+    const float knobRadius = g_TouchStick.Radius * 0.34f;
+    const float knobX = g_TouchStick.CenterX + g_TouchStick.OffsetX * (g_TouchStick.Radius - knobRadius);
+    const float knobY = g_TouchStick.CenterY + g_TouchStick.OffsetY * (g_TouchStick.Radius - knobRadius);
+
+    glColor4f(0.05f, 0.04f, 0.02f, ringAlpha);
     g_GL.DrawCircle(knobX, knobY, knobRadius, 0);
 
-    // War/peace toggle: red while at war, so a glance at the thumb says which
-    // it is without reading the paperdoll.
-    const float buttonRadius = (float)g_TouchStick.ButtonRadius;
-    const bool atWar = (g_Player != NULL && g_Player->Warmode);
-
-    glColor4f(0.0f, 0.0f, 0.0f, 0.30f);
-    g_GL.DrawCircle((float)g_TouchStick.ButtonX, (float)g_TouchStick.ButtonY, buttonRadius, 0);
-
-    if (atWar)
-        glColor4f(0.85f, 0.15f, 0.15f, 0.75f);
+    if (g_TouchStick.Moving)
+        glColor4f(0.45f, 0.85f, 0.45f, ringAlpha); // being carried somewhere else
     else
-        glColor4f(0.75f, 0.75f, 0.75f, 0.40f);
+        glColor4f(0.78f, 0.64f, 0.32f, ringAlpha); // UO's gump gold
 
-    g_GL.DrawCircle(
-        (float)g_TouchStick.ButtonX, (float)g_TouchStick.ButtonY, buttonRadius * 0.82f, 0);
+    g_GL.DrawCircle(knobX, knobY, knobRadius * 0.78f, 0);
+
+    glColor4f(0.95f, 0.86f, 0.60f, ringAlpha * 0.9f);
+    g_GL.DrawCircle(knobX - knobRadius * 0.18f, knobY - knobRadius * 0.18f, knobRadius * 0.34f, 0);
+
+    // War/peace, in the paperdoll's own art: 0x07E5 reads WAR and is shown while
+    // at peace, 0x07E8 reads PEACE and is shown while at war - the label is what
+    // the button will do, which is how UO words it.
+    const bool atWar = (g_Player != NULL && g_Player->Warmode);
+    CGLTexture *warButton = g_Orion.ExecuteGump(atWar ? 0x07E8 : 0x07E5);
+
+    if (warButton != NULL && warButton->Width > 0)
+    {
+        // Scaled up to the ring's width so it stays legible on a dense screen.
+        const float scale = (float)g_TouchStick.Radius / (float)warButton->Width;
+
+        g_TouchStick.ButtonRadius = (int)(warButton->Width * scale) / 2;
+
+        glColor4f(1.0f, 1.0f, 1.0f, g_TouchStick.ButtonHeld ? 1.0f : 0.85f);
+
+        g_GLMatrix.Push();
+        g_GLMatrix.Translate((float)g_TouchStick.ButtonX, (float)g_TouchStick.ButtonY, 0.0f);
+        g_GLMatrix.Scale(scale, scale, 1.0f);
+        warButton->Draw(-warButton->Width / 2, -warButton->Height / 2, false);
+        g_GLMatrix.Pop();
+    }
 
     glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 }
