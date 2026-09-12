@@ -89,7 +89,7 @@ jobs:
       #
       # UO's own data files are never redistributed. They are copyright. The
       # setup script in the package links them out of an install the player
-      # already has; see INSTRUCTIONS.md.
+      # already has; see IGNIS_UO.md.
       - name: Package
         shell: bash
         run: |
@@ -98,7 +98,7 @@ jobs:
 
           mkdir -p package
           cp "${{ matrix.binary }}" package/
-          cp README.md INSTRUCTIONS.md package/
+          cp README.md package/
 
           # Everything the build staged beside the binary, skipping CMake's own
           # bookkeeping and anything the client wrote while being built.
@@ -129,6 +129,7 @@ jobs:
           # install work - it has no Client.cuo, which only the Windows-only
           # Orion Launcher normally writes.
           cp -R package ignis
+          cp IGNIS_UO.md ignis/
           cp packaging/shard.conf ignis/
           cp tools/make_client_cuo.py ignis/
           if [ "$RUNNER_OS" = "Windows" ]; then

@@ -208,39 +208,5 @@ to repair there.
 
 ## Building it yourself
 
-Only needed if you want to change the client; the release archives above are
-prebuilt.
-
-```bash
-brew install cmake ninja sdl2 sdl2_image sdl2_mixer freeimage glew
-git clone https://github.com/yonicohen/OrionUO.git
-cd OrionUO
-cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
-ninja -C build OrionUO
-```
-
-The binary lands at `build/OrionUO/OrionUO`. To run it against your UO data
-without assembling a package, point it at the data directly:
-
-```bash
-cd build/OrionUO
-echo "CustomPath=/full/path/to/Ultima Online" > uo_debug.cfg
-./OrionUO "-login uo.jmaul.co.uk,2593"
-```
-
-The `cd` matters — the client reads `uo_debug.cfg` from its working directory,
-not from beside the binary. Note that running this way lets the client write its
-settings (`orion_options.cfg`, `macros_debug.cuo`) into your UO folder; the
-packaged `setup.sh` exists partly to avoid that.
-
-`-login host,port` must be a single argument, quotes included: the client
-tokenises each argument on spaces, commas and colons, so an unquoted
-`-login host,port` arrives as two arguments and is ignored.
-
-Alternatively, `./tools/setup-macos.sh "/full/path/to/Ultima Online"` installs
-the dependencies, builds, and wires up the runtime files in one go.
-
----
-
-See [README.md](README.md) for build details, what was fixed in this port, and
-known limitations.
+Only needed if you want to change the client; the release archives are prebuilt.
+See [README.md](README.md#building) for macOS, Windows and Linux.

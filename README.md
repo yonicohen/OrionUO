@@ -1,4 +1,4 @@
-# OrionUO Client — macOS fork
+# OrionUO Client
 
 An alternative, open source Ultima Online graphic client.
 
@@ -21,7 +21,7 @@ world rendering, movement, sound, text input, vendors and gump interaction.
 > platform from the [releases page](https://github.com/yonicohen/OrionUO/releases)
 > and run `./setup.sh` (`setup.cmd` on Windows): it asks where your Ultima
 > Online folder is and then starts the client on Ignis UO.
-> [INSTRUCTIONS.md](INSTRUCTIONS.md) has the details, troubleshooting and
+> [IGNIS_UO.md](IGNIS_UO.md) has the details, troubleshooting and
 > controls.
 
 ---
@@ -39,15 +39,17 @@ The port is merged into `master`; the `macos-port` branch is kept for history.
 
 ## Building
 
-### Dependencies
+Pick your platform. macOS is the one this fork was made for and is the most
+exercised; Windows and Linux build from the same source and are covered by CI,
+but have had far less use.
+
+### macOS
 
 Homebrew, plus:
 
 ```bash
 brew install cmake ninja sdl2 sdl2_image sdl2_mixer freeimage glew
 ```
-
-### Build
 
 ```bash
 cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -65,7 +67,7 @@ the runtime files:
 ./tools/setup-macos.sh /path/to/your/UltimaOnline
 ```
 
-### Notes on the build
+#### Notes on the macOS build
 
 - `cotire` (the old precompiled-header helper) is unmaintained and fails under
   CMake 4.x. It is replaced by CMake's native `target_precompile_headers`, and
@@ -75,6 +77,32 @@ the runtime files:
   windowing behaviour, it is the first thing to rule out.
 - macOS OpenGL is deprecated but functional. The renderer is fixed-function
   GL 2.x, so it runs in the legacy profile — 2.1 via Apple's Metal-backed GL.
+
+### Windows
+
+```bat
+md build
+cd build
+cmake -G "Visual Studio 2017" ..
+```
+
+> This builds a 32-bit executable; add `Win64` to the generator name for 64-bit.
+> Plugins are unsupported in the 64-bit client.
+
+> `ORION_WISP` selects the original pure-Win32 implementation. Disabling it uses
+> the SDL path, which is what the macOS build runs on.
+
+### Linux
+
+```bash
+mkdir build && cd build
+cmake -G Ninja .. -DCMAKE_BUILD_TYPE=Release
+ninja OrionUO -j8
+./OrionUO/OrionUO
+```
+
+> As on macOS you need a `Client.cuo` and a `uo_debug.cfg` containing
+> `CustomPath=/path/to/uo/data`.
 
 ---
 
@@ -144,120 +172,26 @@ without a word.
 
 ---
 
-## What was fixed
+## What this fork changes
 
-Most of these were latent bugs that had simply never run on a 64-bit
-little-endian target, not macOS-specific issues. Several are independently
-confirmed by CrossUO, which reached the same conclusions separately.
+The port is mostly renderer work. The short version:
 
-### Crypto (all four broke the game connection)
+- **Rendering.** Upstream drew through `glBegin`/`glEnd` immediate mode, which
+  macOS's GL profile does not have. All of it goes through a batched vertex path
+  now — a shader and a vertex buffer, with a fixed-function fallback — plus a
+  matrix stack of the client's own instead of `glTranslatef`/`glOrtho`. On top of
+  that: Retina-correct output, vsync, sharp filtering and 2x art upscaling.
+- **It connects to a live shard.** Four crypto bugs, the uninitialised login
+  seed, and several disconnect-handling faults had to be fixed before a modern
+  Sphere server would talk to it.
+- **The Windows build compiles again.** It had not since ~2018 — winsock header
+  order, missing import libraries, and 64-bit detection using a retired CMake
+  convention.
+- **Releases are built by CI** on macOS, Linux and Windows, and packaged so a
+  player can run one script instead of following a page of instructions.
 
-- **Twofish compiled big-endian on a little-endian CPU.** `Crypt/platform.h`
-  selected endianness with `#ifdef _M_IX86`, an MSVC-on-x86 macro that clang
-  never defines — so `Bswap()` swapped every word, `ADDR_XOR` reversed byte
-  extraction, and `ALIGN32` changed struct layouts. Now uses `__BYTE_ORDER__`.
-- **`typedef unsigned long u32`** in `Crypt/aes.h` — 8 bytes on LP64, doubling
-  every buffer in the Twofish key schedule and smashing the stack in `reKey()`.
-- **Blowfish box overflow.** `p_box`/`s_box` were `unsigned long` but copied into
-  `unsigned int` tables: 144→72 and 8192→4096 bytes, across 25 key tables.
-- **`CTwofishCrypt::m_IP`** was an 8-byte `unsigned long` filled by a 4-byte
-  `memcpy`, feeding uninitialised memory into the key.
-
-### Networking
-
-- **`select(h, …)` instead of `select(h + 1, …)`.** The client could send but
-  never receive anything. Winsock ignores that argument, which is why it only
-  broke off Windows. Same bug in both ICMP paths.
-- **`tcp_connect` blocked the main thread** with no timeout, freezing the client
-  for the full TCP timeout on an unreachable address. Now non-blocking with a
-  bounded wait.
-- **`SOCKADDR_IN` aliased to `in_addr`**, making `sizeof()` 4 instead of 16 where
-  it is passed as `sendto`'s address length.
-- **Login seed** was computed by passing a binary address to `inet_aton`, which
-  expects a dotted-decimal string, and writing its 0/1 return as the seed.
-- **NAT relay.** Shards behind NAT relay to their own LAN address; the client now
-  stays on the host it successfully logged in to.
-
-### Protocol
-
-- **`ReadString` returned NUL-padded fixed-width fields.** An empty 30-byte
-  character name came back as a 30-character string of NULs — non-empty to every
-  "is this slot used?" test, but printing as blank. The client believed empty
-  character slots held characters, logged in to one, and the server dropped the
-  connection.
-- **`0xBF` / `0xFACE` handshake.** Current Orion answers the version query under
-  this subcommand rather than packet `0xFC`. Shards running the stock Sphere
-  "orion exclusive" script disconnect clients that stay silent. The reply is
-  repeated across the server's 5-second window because Sphere only populates
-  `LOCAL.CHAR` once the character exists, and a reply landing earlier clears
-  nothing.
-- **Packet size table** (upstream PR #97): `== CV_6060` never matched newer
-  clients, and `0xEE`/`0xEF` used a `0x2000` placeholder instead of real lengths.
-- **Packet log timestamps** were disabled off Windows; `localtime_s` now shims to
-  `localtime_r`.
-
-### Runtime and platform
-
-- **`glPixelStorei` during static initialisation.** `CConfigManager` is a global
-  whose constructor created a GL texture before `main()` and before any GL
-  context. Windows' `opengl32` ignores GL calls with no current context; macOS'
-  `libGL` dereferences null and crashes.
-- **Main loop only ran `OnMainLoop()` when an SDL event arrived**, so networking
-  and game logic advanced only while the mouse moved — and it span at 100% CPU
-  when idle.
-- **`SetTimer`/`KillTimer` were no-ops**, so the update and auto-login timers
-  never fired. Now backed by `SDL_AddTimer`, dispatched on the main thread.
-- **`MidiInfoStruct` was `#pragma pack(1)`**, putting an 8-byte pointer at
-  unaligned offsets — the arm64 linker refuses to emit chained fixups for that.
-- **`WaveHeader` used `unsigned long`** (4 bytes on Windows, 8 on LP64), shifting
-  every field after `chunkSize`.
-- **`GetFileVersion` never set the numeric version**, so the client reported
-  version 0 to servers that check it.
-
-### Audio
-
-Every `BASS_*` call was a no-op macro off Windows — the build was completely
-silent. `Managers/SoundBackend.cpp` implements the used surface over SDL_mixer,
-leaving `CSoundManager` unchanged. Sound effects become `Mix_Chunk`s, music a
-`Mix_Music`; the MIDI soundfont (`bin/uo_4mb_2.sf2`) is copied to the build
-directory automatically.
-
-### Input
-
-- **All 27 `OnTextInput` handlers were `NOT_IMPLEMENTED`** — no text entry
-  anywhere: login, character creation, chat, books, options, bulletin boards.
-  The platform-neutral handlers now compile on all platforms with the SDL events
-  adapted onto them.
-- **`SDL_StartTextInput()` was never called**, so SDL emitted no text events.
-- **`VK_*` constants matched neither Win32 nor SDL.** `VK_BACK` was 32 (space)
-  and `VK_UP` was 8 (backspace), so space deleted characters and backspace moved
-  the caret. Only Return/Tab/Escape worked, by coincidence.
-- **Gump dragging.** The SDL handler cleared `LeftButtonPressed` *before*
-  `OnLeftMouseButtonUp()`, and `LeftDroppedOffset()` returns `(0,0)` when the
-  button reads as up — so every drag measured zero distance and no gump moved.
-- **`UnicodeTalk`/`EncodeUTF8`/`DecodeUTF8`** called unimplemented Win32 stubs,
-  so all cliloc text, tooltips, item names and outgoing unicode chat were empty.
-
-### Window
-
-- **`SDL_WINDOWEVENT_*` subtypes were compared against `ev.type`**, so the entire
-  window-event block was dead code: show/hide never reached the plugin or the
-  sound/FPS handling, and resize was never noticed.
-- The window is now created `SDL_WINDOW_RESIZABLE` with a 640×480 minimum, and
-  the game view tracks the window size.
-- **`GetSystemMetrics` returned 0**, and `SM_CYFRAME`/`SM_CYCAPTION`/
-  `SM_CXSIZEFRAME` all aliased to `SM_CXSCREEN`.
-
-### Misc
-
-- `GetSystemDefaultLangID` returned 0, which is `LANG_RUSSIAN` — the client
-  defaulted to Russian on macOS. Locale now comes from `SDL_GetPreferredLocales`.
-- Clipboard (`OpenClipboard`/`GetClipboardData`/`GlobalLock`) implemented over
-  SDL, `ShellExecuteA` over `SDL_OpenURL`, `GetLocalTime` over `localtime_r`.
-- `CommandLineToArgvW` returned nothing, so no command-line option was ever
-  parsed — including the login server. Its result is freed by the caller with
-  `LocalFree`, so it must be a `malloc`'d block.
-- Music streams leaked on every track change.
+An Android port lives on the `android-port` branch: it plays, with touch
+controls and an on-screen movement stick, but has no hue colorisation yet.
 
 ---
 
@@ -331,41 +265,6 @@ they sit inside `#if USE_WISP` blocks or have working SDL equivalents:
   been tested since these changes.
 - The plugin system is not portable and no attempt has been made to replace it.
 
-
----
-
-## Building on Windows and Linux
-
-Unchanged from upstream, and untested since the macOS work — it should still
-build, but treat it as unverified.
-
-This project requires CMake 3.7 or newer.
-
-### Windows
-
-```bat
-md build
-cd build
-cmake -G "Visual Studio 2017" ..
-```
-
-> This builds a 32-bit executable; add `Win64` to the generator name for 64-bit.
-> Plugins are unsupported in the 64-bit client.
-
-> `ORION_WISP` selects the original pure-Win32 implementation. Disabling it uses
-> the SDL path, which is what the macOS build runs on.
-
-### Linux
-
-```bash
-mkdir build && cd build
-cmake -G Ninja .. -DCMAKE_BUILD_TYPE=Release
-ninja OrionUO -j8
-./OrionUO/OrionUO
-```
-
-> As on macOS you need a `Client.cuo` and a `uo_debug.cfg` containing
-> `CustomPath=/path/to/uo/data`.
 
 ---
 
