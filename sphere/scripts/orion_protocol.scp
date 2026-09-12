@@ -1,0 +1,27 @@
+// A private channel between this server and the Orion client.
+//
+// The client already has one: packet 0xFC carries Orion's own messages, with a
+// 16-bit command after a 16-bit length. Sphere can hook any packet id from a
+// script (PACKET252 in sphere.ini, 252 being 0xFC) and reply on the same
+// socket with SENDPACKET - so the two ends can talk about things UO's 1997
+// protocol has no opcode for, without touching either codebase.
+//
+// Locals on entry:
+//   ARGN1        the packet id
+//   LOCAL.NUM    how many bytes arrived
+//   LOCAL.STR    the raw bytes
+//   LOCAL.ACCOUNT, LOCAL.CHAR
+//   ARGO         the client, for ARGO.SENDPACKET
+//
+// Returning 1 tells Sphere the packet is handled and should not be processed
+// further; 0 lets it fall through to the normal handler.
+
+[FUNCTION f_orion_packet]
+SERV.LOG ORION in: packet=<ARGN1> bytes=<LOCAL.NUM> account='<LOCAL.ACCOUNT>'
+
+// Answer with OCT_ORION_FEATURES (50): 0xFC, length 9, command 50, flags.
+// The client reads this in PACKET_HANDLER(OrionMessages) and applies it.
+ARGO.SENDPACKET B252 W9 W50 D3735928559
+
+SERV.LOG ORION out: OCT_ORION_FEATURES payload=0xDEADBEEF
+RETURN 1
