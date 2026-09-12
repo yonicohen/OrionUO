@@ -257,7 +257,7 @@ public:
 	*/
     virtual void Render(bool mode);
 
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
     // The on-screen movement stick; see WISP_WINDOW::CTouchStick.
     void DrawTouchStick();
 #endif

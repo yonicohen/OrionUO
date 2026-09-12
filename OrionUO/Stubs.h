@@ -1,5 +1,13 @@
 #pragma once
 
+// A touch device with no mouse, no keyboard and no window manager: the client
+// draws its own keyboard, scales its gumps up, and puts a movement ring on the
+// screen. Nearly every place that asked whether this was Android was really
+// asking this, and iOS answers the same way.
+#if defined(__ANDROID__) || defined(ORION_IOS)
+#define ORION_MOBILE 1
+#endif
+
 #if !defined(ORION_WINDOWS)
 
 #include <unistd.h>
@@ -10,9 +18,9 @@
 
 #define NO_SDL_GLEXT
 #if defined(ORION_GLES)
-// Android has no desktop GL and no GLEW: GLES needs no extension loader, since
-// the core entry points are exported directly by libGLESv1_CM. GLCompat.h fills
-// in what the renderer still calls that GLES does not have.
+// Mobile has no desktop GL and no GLEW: GLES needs no extension loader, since
+// the core entry points are exported directly by libGLESv2. GLCompat.h fills in
+// what the renderer still calls that GLES does not have.
 #include <GLES2/gl2.h>
 // Without this glext.h declares the extension enums but not their entry points,
 // so glBindFramebufferOES and friends come out as undeclared identifiers.

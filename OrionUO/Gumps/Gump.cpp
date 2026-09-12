@@ -140,7 +140,7 @@ void CGump::FixCoordinates()
 //---------------------------------------------------------------------------
 float CGump::InterfaceScale() const
 {
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
     // The screen gumps are the login, character list and the frame the world is
     // drawn in: they are laid out against the window itself and have to stay at
     // its own scale. Everything else is a floating panel of UO art, sized for a

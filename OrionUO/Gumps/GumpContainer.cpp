@@ -75,7 +75,7 @@ CGumpContainer::CGumpContainer(uint serial, uint id, short x, short y)
     m_GridResizer = (CGUIResizeButton *)Add(
         new CGUIResizeButton(ID_GC_GRID_RESIZE, 0x0837, 0x0838, 0x0838, 0, 0));
     m_GridResizer->Visible = false;
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
     m_GridResizer->HitPadding = GridResizerPlate / 2;
 #endif
 
@@ -561,7 +561,7 @@ void CGumpContainer::UpdateContent()
 
         // Only where a fingertip has to find it. With a mouse the eight pixel
         // handle is target enough, and a tinted square under it is just a smudge.
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
         m_GridResizerPlate->Visible = true;
 #else
         m_GridResizerPlate->Visible = false;
@@ -804,7 +804,7 @@ void CGumpContainer::GUMP_TEXT_ENTRY_EVENT_C
     m_GridSearch->Focused = true;
     WantRedraw = true;
 
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
     // There is no hardware keyboard to start typing on.
     g_OrionWindow.ToggleKeyboardGump();
 #endif

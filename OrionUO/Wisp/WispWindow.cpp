@@ -10,7 +10,7 @@ namespace WISP_WINDOW
 {
 CWindow *g_WispWindow = nullptr;
 CTouchStick g_TouchStick;
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
 static int SDLCALL AppLifecycleWatch(void *userdata, SDL_Event *event);
 #endif
 //---------------------------------------------------------------------------
@@ -312,7 +312,7 @@ bool CWindow::Create(
     // session, including over the login panel it was covering. There it is
     // turned on and off to follow the focused text field instead - see
     // UpdateTextInput().
-#if !defined(__ANDROID__)
+#if !defined(ORION_MOBILE)
     SDL_StartTextInput();
 #else
     SDL_AddEventWatch(AppLifecycleWatch, nullptr);
@@ -760,7 +760,7 @@ LRESULT CWindow::OnWindowProc(HWND &hWnd, UINT &message, WPARAM &wParam, LPARAM 
 }
 #else
 //----------------------------------------------------------------------------------
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
 namespace
 {
 // The client is written for a two-button mouse: the left button selects, drags
@@ -871,7 +871,7 @@ bool g_InSyntheticTouchEvent = false;
 // button or by tapping it twice like any other gump.
 void CWindow::ToggleKeyboardGump()
 {
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
     if (g_GumpKeyboard != NULL)
     {
         g_GumpManager.RemoveGump(g_GumpKeyboard);
@@ -914,7 +914,7 @@ void CWindow::ToggleKeyboardGump()
 //----------------------------------------------------------------------------------
 void CWindow::TouchMouseEvent(uint type, uchar button, const WISP_GEOMETRY::CPoint2Di &at)
 {
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
     WISP_MOUSE::g_WispMouse->UseTouchPosition = true;
     WISP_MOUSE::g_WispMouse->TouchPosition = at;
 
@@ -949,8 +949,10 @@ void CWindow::TouchMouseEvent(uint type, uchar button, const WISP_GEOMETRY::CPoi
 #endif
 }
 //----------------------------------------------------------------------------------
+#if defined(ORION_MOBILE)
 #if defined(__ANDROID__)
 #include <jni.h>
+#endif
 
 // A desktop client saves its profile - gump placement, macros, options - when it
 // is closed. An Android one is never closed: it is swiped away, or killed while
@@ -973,6 +975,7 @@ static int SDLCALL AppLifecycleWatch(void * /*userdata*/, SDL_Event *event)
     return 0;
 }
 
+#if defined(__ANDROID__)
 static void AndroidSetImmersive(bool immersive)
 {
     JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
@@ -994,7 +997,8 @@ static void AndroidSetImmersive(bool immersive)
 
     env->DeleteLocalRef(activity);
 }
-#endif
+#endif // __ANDROID__
+#endif // ORION_MOBILE
 //----------------------------------------------------------------------------------
 void CWindow::ToggleTextInput()
 {
@@ -1003,7 +1007,7 @@ void CWindow::ToggleTextInput()
 //----------------------------------------------------------------------------------
 void CWindow::UpdateTextInput(bool wanted)
 {
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
     // The client draws its own keyboard everywhere now, login screens included:
     // it does not take half the screen and does not force the window out of
     // immersive mode to find somewhere to appear, and it carries the chat modes.
@@ -1021,7 +1025,7 @@ void CWindow::UpdateTextInput(bool wanted)
 #endif
 }
 //----------------------------------------------------------------------------------
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
 static os_path TouchStickPlacementPath()
 {
     return g_App.ExeFilePath("touchstick.txt");
@@ -1274,7 +1278,7 @@ static bool TouchStickCentred()
 //----------------------------------------------------------------------------------
 void CWindow::ProcessTouch()
 {
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
     UpdateTouchStickBounds();
 
     // The stick has to keep pushing: the client walks a step per right-button
@@ -1327,7 +1331,7 @@ void CWindow::ProcessTouch()
 //----------------------------------------------------------------------------------
 bool CWindow::OnWindowProc(SDL_Event &ev)
 {
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
     // Belt and braces for the hint above: whatever SDL decides to synthesise
     // from a finger is marked with this device id, and the gesture handler has
     // already turned that same finger into the events the client should see.
@@ -1440,7 +1444,7 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
         }
         break;
 
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
         case SDL_FINGERDOWN:
         {
             g_LastTouchEventTicks = SDL_GetTicks();

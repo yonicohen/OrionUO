@@ -963,7 +963,7 @@ void CGameScreen::CalculateGameWindowBounds()
     int oldDrawOffsetX = g_RenderBounds.WindowDrawOffsetX;
     int oldDrawOffsetY = g_RenderBounds.WindowDrawOffsetY;
 
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
     // The game window is a resizable panel on the desktop, with the rest of the
     // screen left as somewhere to park gumps. There is no way to resize it by
     // touch and no second monitor's worth of room to spare, so it takes the
@@ -1604,7 +1604,7 @@ void CGameScreen::PrepareContent()
 @param [__in] mode true - отрисовка, false - выбор
 @return При выборе объектов - идентификатор выбранного объекта
 */
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
 void CGameScreen::DrawTouchStick()
 {
     using WISP_WINDOW::g_TouchStick;
@@ -1879,7 +1879,7 @@ void CGameScreen::Render(bool mode)
 
         m_GameScreenGump.Draw();
 
-#if defined(__ANDROID__)
+#if defined(ORION_MOBILE)
         DrawTouchStick();
 #endif
 
