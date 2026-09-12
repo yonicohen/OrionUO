@@ -94,8 +94,14 @@ else()
 	set(ORION_DLL_STATIC ON)
 	set(ORION_WISP OFF)	
 	find_package(ZLIB REQUIRED)
+	# Homebrew links "sdl2" to sdl2-compat, which is the SDL2 API reimplemented on
+	# SDL3, and keeps SDL2 proper keg-only. sdl2_mixer is built against SDL2
+	# proper, so taking the default put both into one process, each with its own
+	# globals and event queue. Prefer the real one where it exists so everything
+	# agrees; anywhere else the normal search applies.
 	find_package(SDL2 REQUIRED)
-	find_package(SDL2_image REQUIRED)
+	# SDL2_image is not used - see OrionUO/CMakeLists.txt.
+
 	find_package(SDL2_mixer REQUIRED)
 	# The bundled FindSDL2_mixer module predates find_package_handle_standard_args:
 	# it sets SDL2MIXER_* and never fails, so check it and normalise the names.

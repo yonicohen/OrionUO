@@ -72,9 +72,11 @@ the runtime files:
 - `cotire` (the old precompiled-header helper) is unmaintained and fails under
   CMake 4.x. It is replaced by CMake's native `target_precompile_headers`, and
   kept behind `-DORION_USE_COTIRE=ON` only for the legacy unity build.
-- The client links `sdl2-compat` rather than SDL2 proper, because Homebrew's
-  `sdl2_image`/`sdl2_mixer` depend on it. This works; if you hit odd input or
-  windowing behaviour, it is the first thing to rule out.
+- The client links `sdl2-compat` - the SDL2 API reimplemented on SDL3 - because
+  that is what Homebrew's `sdl2` formula now installs; `/opt/homebrew/opt/sdl2`
+  is a symlink into the sdl2-compat cellar. `sdl2_mixer` resolves to the same
+  library, so there is one SDL in the process, not two. Moving off it would mean
+  building SDL2 from source or porting to SDL3.
 - macOS OpenGL is deprecated but functional. The renderer is fixed-function
   GL 2.x, so it runs in the legacy profile — 2.1 via Apple's Metal-backed GL.
 
@@ -240,24 +242,6 @@ they sit inside `#if USE_WISP` blocks or have working SDL equivalents:
   from them: `unsigned long` assumed to be 32-bit (three times) and `wchar_t`
   assumed to be 16-bit (once). If something crashes in crypto or text handling,
   look there first.
-
-### Worth doing
-
-- **`SetSize` on the window** is the last stub reachable at runtime.
-- **`CPingThread` can be constructed with an empty host** when login fails
-  before the server list arrives. Harmless, but it should be guarded.
-- The server-list log line in `ServerList.cpp` is kept deliberately — it prints
-  the names a shard advertises, which is how you notice you are connecting to
-  the wrong entry.
-- **Fold in the CrossUO fixes.** CrossUO is the maintained fork of this codebase
-  and has years of additional portability work.
-- **Stop depending on `sdl2-compat`** by building against SDL2 proper, or move to
-  SDL3 outright.
-- **Replace FreeImage** — it is unmaintained and the most awkward dependency to
-  redistribute (FIPL/GPL dual licence).
-- **Audio verification.** The SDL_mixer backend is verified for WAV sound effects
-  and music loading, but MIDI playback through fluidsynth has not been confirmed
-  against real UO music files.
 
 ### Not planned
 

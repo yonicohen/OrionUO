@@ -131,6 +131,10 @@ jobs:
           cp -R package ignis
           cp IGNIS_UO.md ignis/
           cp packaging/shard.conf ignis/
+          # The icon for the app bundle setup.sh builds on macOS.
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            cp packaging/OrionUO.icns ignis/
+          fi
           cp tools/make_client_cuo.py ignis/
           if [ "$RUNNER_OS" = "Windows" ]; then
             cp packaging/setup.cmd packaging/setup.ps1 packaging/play-ignis.cmd ignis/

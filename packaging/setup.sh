@@ -277,7 +277,54 @@ shard_port="$(sed -n 's/^SHARD_PORT=//p' shard.conf 2>/dev/null | head -1)"
 : "${shard_host:=uo.jmaul.co.uk}"
 : "${shard_port:=2593}"
 
+# --------------------------------------------------------------------------
+# 7a. A double-clickable app, on macOS
+# --------------------------------------------------------------------------
+# The client is a plain Unix executable, so Finder gives it the generic
+# "executable" icon and the Dock shows the raw process name. An icon and a
+# proper name need a bundle, which is only a directory with a plist in it - so
+# build one here that runs the launcher.
+if [[ "$(uname -s)" == "Darwin" && -f "$here/OrionUO.icns" ]]; then
+    step "Making Ignis UO.app"
+    app="$here/Ignis UO.app"
+    rm -rf "$app"
+    mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+    cp "$here/OrionUO.icns" "$app/Contents/Resources/OrionUO.icns"
+
+    cat > "$app/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>Ignis UO</string>
+    <key>CFBundleDisplayName</key><string>Ignis UO</string>
+    <key>CFBundleIdentifier</key><string>uk.co.jmaul.orionuo</string>
+    <key>CFBundleExecutable</key><string>Ignis UO</string>
+    <key>CFBundleIconFile</key><string>OrionUO.icns</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>1.0.37.0</string>
+    <key>NSHighResolutionCapable</key><true/>
+</dict>
+</plist>
+PLIST
+
+    cat > "$app/Contents/MacOS/Ignis UO" <<LAUNCH
+#!/bin/bash
+# The bundle is inside the package, so the client still runs from the package
+# directory, where its data/ and uo_debug.cfg are.
+cd "\$(dirname "\${BASH_SOURCE[0]}")/../../.." || exit 1
+exec ./play-ignis.sh "\$@"
+LAUNCH
+    chmod +x "$app/Contents/MacOS/Ignis UO"
+
+    # Finder caches icons per path; touching the bundle makes it re-read.
+    touch "$app"
+    say "    $app"
+    say "    Drag it to the Dock or Applications if you want it there."
+fi
+
 step "Ready"
+say "    Double-click: Ignis UO.app" 
 say "    Play with:   $here/play-ignis.sh"
 say "    Equivalent:  cd $here && ./OrionUO \"-login $shard_host,$shard_port\""
 say
