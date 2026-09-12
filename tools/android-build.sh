@@ -20,7 +20,7 @@ prefix="${ANDROID_SDL2_PREFIX:-$HOME/.cache/orionuo-android/sdl2}"
 outdir="${OUT:-$repo/build-android}"
 api="${ANDROID_API:-24}"
 abi="${ANDROID_ABI:-aarch64-linux-android}"
-jobs="${JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || echo 4)}"
+jobs="${JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)}"
 
 if [[ ! -d "$ndk" ]]; then
     echo "error: NDK not found at $ndk (brew install --cask android-ndk)" >&2

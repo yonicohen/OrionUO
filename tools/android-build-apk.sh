@@ -76,9 +76,16 @@ echo "compiling resources"
 "$bt/aapt2" compile --dir "$repo/android/res" -o "$out/res.zip" >/dev/null
 
 echo "linking apk"
+# The manifest carries a placeholder version; a release stamps the tag over it
+# so the file on a phone can be told apart from the next one.
+version_args=()
+[[ -n "${ANDROID_VERSION_CODE:-}" ]] && version_args+=(--version-code "$ANDROID_VERSION_CODE")
+[[ -n "${ANDROID_VERSION_NAME:-}" ]] && version_args+=(--version-name "$ANDROID_VERSION_NAME")
+
 "$bt/aapt2" link \
     -I "$android_jar" \
     --manifest "$repo/android/AndroidManifest.xml" \
+    "${version_args[@]+"${version_args[@]}"}" \
     -o "$out/base.apk" \
     "$out/res.zip" >/dev/null
 
@@ -98,16 +105,30 @@ zip -q -u unsigned.apk classes.dex
 zip -q -r unsigned.apk lib
 "$bt/zipalign" -f 4 unsigned.apk aligned.apk
 
-# A debug keystore is enough to install; this is not a release signing key.
-keystore="$HOME/.cache/orionuo-android/debug.keystore"
+# Android will only replace an installed app with one signed by the same key, so
+# a release built anywhere other than this machine has to use a keystore that
+# outlives the build. Point ANDROID_KEYSTORE at one - CI keeps it in a secret -
+# and otherwise fall back to a debug key generated here, which is enough to
+# install but means a rebuild elsewhere cannot upgrade over it.
+keystore="${ANDROID_KEYSTORE:-$HOME/.cache/orionuo-android/debug.keystore}"
+keystore_pass="${ANDROID_KEYSTORE_PASS:-android}"
+key_pass="${ANDROID_KEY_PASS:-$keystore_pass}"
+key_alias="${ANDROID_KEY_ALIAS:-androiddebugkey}"
+
 if [[ ! -f "$keystore" ]]; then
+    if [[ -n "${ANDROID_KEYSTORE:-}" ]]; then
+        echo "error: ANDROID_KEYSTORE=$keystore does not exist" >&2
+        exit 2
+    fi
+
     mkdir -p "$(dirname "$keystore")"
-    keytool -genkeypair -keystore "$keystore" -storepass android -keypass android \
-        -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
-        -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
+    keytool -genkeypair -keystore "$keystore" -storepass "$keystore_pass" \
+        -keypass "$key_pass" -alias "$key_alias" -keyalg RSA -keysize 2048 \
+        -validity 10000 -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
 fi
 
-"$bt/apksigner" sign --ks "$keystore" --ks-pass pass:android --key-pass pass:android \
+"$bt/apksigner" sign --ks "$keystore" --ks-pass "pass:$keystore_pass" \
+    --key-pass "pass:$key_pass" --ks-key-alias "$key_alias" \
     --out "$out/orionuo.apk" aligned.apk
 "$bt/apksigner" verify "$out/orionuo.apk" && echo "signature verified"
 

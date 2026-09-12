@@ -159,9 +159,107 @@ jobs:
           path: ${{ matrix.ignis }}.tar.gz
           if-no-files-found: error
 
+
+  android:
+    name: Android (arm64 APK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify the tag is on master
+        shell: bash
+        run: |
+          set -eu
+          git fetch -q origin master
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::$GITHUB_SHA is not an ancestor of origin/master - refusing to release."
+            exit 1
+          fi
+          echo "Tagged commit is on master."
+
+      # d8 rejects class files from the newest JDKs, so pin the one Android's
+      # own tooling is built against rather than whatever the image defaults to.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build cmake zip \
+            libsdl2-dev libsdl2-mixer-dev \
+            libglew-dev libglu1-mesa-dev xorg-dev
+
+      # tools/android-build.sh takes the list of sources from the desktop build's
+      # compile database - a bare find would pick up the Windows-only files CMake
+      # never compiles. Configuring is enough; nothing here has to be built.
+      - name: Configure the desktop build for its compile database
+        run: |
+          cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: Cache SDL2 for Android
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/orionuo-android/sdl2
+          key: android-sdl2-2.32.10-mixer-2.8.1
+
+      - name: Build SDL2 and SDL2_mixer for Android
+        run: |
+          export ANDROID_NDK="$ANDROID_NDK_LATEST_HOME"
+          ./tools/android-build-deps.sh
+
+      - name: Build libmain.so
+        run: |
+          export ANDROID_NDK="$ANDROID_NDK_LATEST_HOME"
+          ./tools/android-build.sh
+
+      # Android replaces an installed app only with one signed by the same key.
+      # With ANDROID_KEYSTORE_BASE64 set, every release is upgradable over the
+      # last; without it each build gets a throwaway debug key and the previous
+      # version has to be uninstalled first.
+      - name: Build the APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -eu
+          export ANDROID_NDK="$ANDROID_NDK_LATEST_HOME"
+          export ANDROID_SDK="$ANDROID_HOME"
+
+          if [ -n "${KEYSTORE_BASE64:-}" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            export ANDROID_KEYSTORE="$RUNNER_TEMP/release.keystore"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret - signing with a throwaway debug key, so this APK cannot be installed over a previous release."
+          fi
+
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          export ANDROID_VERSION_NAME="${tag#v}"
+          export ANDROID_VERSION_CODE="$GITHUB_RUN_NUMBER"
+
+          yes 2>/dev/null | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            --sdk_root="$ANDROID_HOME" \
+            "platforms;android-34" "build-tools;34.0.0" >/dev/null
+          ./tools/android-build-apk.sh
+
+          mv build-android/apk/orionuo.apk "orionuo-android-arm64.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: orionuo-android-arm64
+          path: orionuo-android-arm64.apk
+          if-no-files-found: error
+
   publish:
     name: Publish release
-    needs: build
+    needs: [build, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -175,7 +273,9 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           generate_release_notes: true
-          files: artifacts/**/*.tar.gz
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.apk
           body: |
             Two downloads per platform.
 
@@ -209,6 +309,11 @@ jobs:
             install you already have - your shard's download, or the free Classic
             Client from https://uo.com/client-download/ . Setup links them in place:
             nothing is copied into your UO folder and nothing there is modified.
+
+            **`orionuo-android-arm64.apk`** - the Android build, for arm64 phones
+            and tablets. Sideload it, then push your UO data onto the device; the
+            client reads it from its own external files directory. See
+            `docs/ANDROID.md` for the `adb` commands and the touch controls.
 
             The Windows and Linux builds come from the same source but have had far
             less use than the macOS one, which is the platform this port was made for.

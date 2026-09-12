@@ -91,3 +91,66 @@ jobs:
           name: orionuo-windows-x64
           path: build/OrionUO/Release/OrionUO.exe
           if-no-files-found: error
+
+  android:
+    name: Android (arm64 APK)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # d8 rejects class files from the newest JDKs, so pin the one Android's
+      # own tooling is built against rather than whatever the image defaults to.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ninja-build cmake zip \
+            libsdl2-dev libsdl2-mixer-dev \
+            libglew-dev libglu1-mesa-dev xorg-dev
+
+      # tools/android-build.sh takes the list of sources from the desktop build's
+      # compile database - a bare find would pick up the Windows-only files CMake
+      # never compiles. Configuring is enough; nothing here has to be built.
+      - name: Configure the desktop build for its compile database
+        run: |
+          cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      # SDL2 and SDL2_mixer are cross-built from source and take several minutes;
+      # they only change when the pinned versions do.
+      - name: Cache SDL2 for Android
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/orionuo-android/sdl2
+          key: android-sdl2-2.32.10-mixer-2.8.1
+
+      - name: Build SDL2 and SDL2_mixer for Android
+        run: |
+          export ANDROID_NDK="$ANDROID_NDK_LATEST_HOME"
+          ./tools/android-build-deps.sh
+
+      - name: Build libmain.so
+        run: |
+          export ANDROID_NDK="$ANDROID_NDK_LATEST_HOME"
+          ./tools/android-build.sh
+
+      - name: Build the APK
+        run: |
+          export ANDROID_NDK="$ANDROID_NDK_LATEST_HOME"
+          export ANDROID_SDK="$ANDROID_HOME"
+          yes 2>/dev/null | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            --sdk_root="$ANDROID_HOME" \
+            "platforms;android-34" "build-tools;34.0.0" >/dev/null
+          ./tools/android-build-apk.sh
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: orionuo-android-arm64
+          path: build-android/apk/orionuo.apk
+          if-no-files-found: error
