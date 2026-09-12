@@ -91,9 +91,26 @@ void CMainScreen::ProcessSmoothAction(uchar action)
         g_OrionWindow.Destroy();
 }
 //----------------------------------------------------------------------------------
+void CMainScreen::ApplyPendingAccounting()
+{
+    if (!m_HavePendingAccounting || m_Account == NULL || m_Password == NULL)
+        return;
+
+    SetAccounting(m_PendingAccount, m_PendingPassword);
+}
+//----------------------------------------------------------------------------------
 void CMainScreen::SetAccounting(const string &account, const string &password)
 {
     WISPFUN_DEBUG("c165_f5");
+
+    // Remembered so the login gump can ask for them again once it exists.
+    m_PendingAccount = account;
+    m_PendingPassword = password;
+    m_HavePendingAccounting = true;
+
+    if (m_Account == NULL || m_Password == NULL || m_MainGump.m_PasswordFake == NULL)
+        return;
+
     m_Account->SetText(account);
     m_Password->SetText(password);
 
