@@ -590,7 +590,16 @@ void CGameWorld::MoveToTop(CGameObject *obj)
         return;
 
     if (obj->Container == 0xFFFFFFFF)
+    {
         g_MapManager.AddRender(obj);
+
+        // Putting it on the map is not enough: the render list is built once and
+        // reused until something marks it stale, and only moving did. An item
+        // that arrived while standing still - everything around you at login -
+        // stayed invisible until you walked out of range and back. The list is
+        // rebuilt at most once a frame, so saying so on every arrival is cheap.
+        g_GameScreen.RenderListInitalized = false;
+    }
 
     if (obj->m_Next == NULL)
         return;
@@ -923,8 +932,12 @@ void CGameWorld::UpdateGameObject(
         if (updateType == UGOT_MULTI)
         {
             item->MultiBody = true;
+            // The hue counts as well as the graphic and the position: dyeing a
+            // ship or a house repaints the whole structure, and without this the
+            // components kept the colour they were built with.
             item->WantUpdateMulti = ((graphic & 0x3FFF) != obj->Graphic) || (obj->GetX() != x) ||
-                                    (obj->GetY() != y) || (obj->GetZ() != z);
+                                    (obj->GetY() != y) || (obj->GetZ() != z) ||
+                                    (g_ColorManager.FixColor(color, (color & 0x8000)) != obj->Color);
 
             item->Graphic = graphic & 0x3FFF;
         }

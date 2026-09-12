@@ -32,7 +32,9 @@ public:
 	@param [__in] flags Multi object flags
 	@return
 	*/
-    CMultiObject(ushort graphic, short x, short y, char z, int flags);
+    // color is the hue of the item the multi belongs to. Dyeing a ship or a
+    // house recolours the whole structure, not just the tile the server names.
+    CMultiObject(ushort graphic, short x, short y, char z, int flags, ushort color = 0);
 
     /*!
 	Destructor

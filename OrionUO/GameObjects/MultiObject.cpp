@@ -11,8 +11,8 @@
 //----------------------------------------------------------------------------------
 #include "stdafx.h"
 //----------------------------------------------------------------------------------
-CMultiObject::CMultiObject(ushort graphic, short x, short y, char z, int flags)
-    : CRenderStaticObject(ROT_MULTI_OBJECT, 0, graphic, 0, x, y, z)
+CMultiObject::CMultiObject(ushort graphic, short x, short y, char z, int flags, ushort color)
+    : CRenderStaticObject(ROT_MULTI_OBJECT, 0, graphic, color, x, y, z)
     , OnTarget(flags == 2)
 {
     WISPFUN_DEBUG("c25_f1");

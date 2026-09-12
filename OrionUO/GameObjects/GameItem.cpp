@@ -623,7 +623,7 @@ CGameItem::AddMulti(ushort graphic, ushort color, char x, char y, char z, bool i
     if (isCustomHouseMulti)
         mo = new CCustomHouseMultiObject(graphic, color, GetX() + x, GetY() + y, z, 1);
     else
-        mo = new CMultiObject(graphic, GetX() + x, GetY() + y, z, 1);
+        mo = new CMultiObject(graphic, GetX() + x, GetY() + y, z, 1, color);
 
     g_MapManager.AddRender(mo);
     AddMultiObject(mo);
@@ -684,7 +684,8 @@ void CGameItem::LoadMulti(bool dropAlpha)
 
             if (!flags)
             {
-                CMultiObject *mo = new CMultiObject(graphic, m_X + x, m_Y + y, m_Z + (char)z, 1);
+                CMultiObject *mo =
+                    new CMultiObject(graphic, m_X + x, m_Y + y, m_Z + (char)z, 1, Color);
 
                 mo->m_DrawTextureColor[3] = alpha;
 
@@ -719,7 +720,7 @@ void CGameItem::LoadMulti(bool dropAlpha)
             if (pmb->Flags)
             {
                 CMultiObject *mo = new CMultiObject(
-                    pmb->ID, m_X + pmb->X, m_Y + pmb->Y, m_Z + (char)pmb->Z, pmb->Flags);
+                    pmb->ID, m_X + pmb->X, m_Y + pmb->Y, m_Z + (char)pmb->Z, pmb->Flags, Color);
 
                 mo->m_DrawTextureColor[3] = alpha;
 
