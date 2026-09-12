@@ -10,6 +10,9 @@ namespace WISP_WINDOW
 {
 CWindow *g_WispWindow = nullptr;
 CTouchStick g_TouchStick;
+#if defined(__ANDROID__)
+static int SDLCALL AppLifecycleWatch(void *userdata, SDL_Event *event);
+#endif
 //---------------------------------------------------------------------------
 #if USE_WISP
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -311,6 +314,8 @@ bool CWindow::Create(
     // UpdateTextInput().
 #if !defined(__ANDROID__)
     SDL_StartTextInput();
+#else
+    SDL_AddEventWatch(AppLifecycleWatch, nullptr);
 #endif
 
     SDL_SysWMinfo info;
@@ -865,6 +870,27 @@ void CWindow::TouchMouseEvent(uint type, uchar button, const WISP_GEOMETRY::CPoi
 #if defined(__ANDROID__)
 #include <jni.h>
 
+// A desktop client saves its profile - gump placement, macros, options - when it
+// is closed. An Android one is never closed: it is swiped away, or killed while
+// backgrounded, so nothing was ever written and everything was lost each time.
+//
+// Backgrounding is the platform's real shutdown, but the event cannot be handled
+// from the main loop: SDL blocks the game thread as soon as Android pauses the
+// app, so a queued event is never pumped. A watch is called synchronously by
+// whoever sends the event, which is what SDL documents for exactly this on
+// mobile, and it runs while there is still time to write.
+static int SDLCALL AppLifecycleWatch(void * /*userdata*/, SDL_Event *event)
+{
+    if (event != nullptr &&
+        (event->type == SDL_APP_WILLENTERBACKGROUND || event->type == SDL_APP_TERMINATING ||
+         event->type == SDL_APP_DIDENTERBACKGROUND))
+    {
+        g_Orion.SaveLocalConfig(g_PacketManager.ConfigSerial);
+    }
+
+    return 0;
+}
+
 static void AndroidSetImmersive(bool immersive)
 {
     JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
@@ -1031,8 +1057,44 @@ static void TouchStickPlaceAt(const WISP_GEOMETRY::CPoint2Di &at)
     g_StickPlaceY = (float)y / (float)size.Height;
 }
 
-// Turns the knob's deflection into the cursor position the client would see if
-// someone were holding the right button that far from their character.
+// Walks in the direction the knob is pushed.
+//
+// This used to fake the right button at a cursor position near the player, the
+// way a desktop walk works. That put a synthetic press wherever the cursor
+// landed - and gumps float over the world, so pushing the stick towards one
+// stopped the walk dead (the client only walks while RightGump is null) and
+// letting go right-clicked it, which in UO closes it. That is where the
+// paperdoll went. Asking the pathfinder directly keeps the stick clear of the
+// interface entirely.
+static void TouchStickWalk()
+{
+    if (g_PathFinder.AutoWalking)
+        return;
+
+    const float deflection =
+        sqrtf(g_TouchStick.OffsetX * g_TouchStick.OffsetX +
+              g_TouchStick.OffsetY * g_TouchStick.OffsetY);
+
+    const int centerX = g_ConfigManager.GameWindowX + g_ConfigManager.GameWindowWidth / 2;
+    const int centerY = g_ConfigManager.GameWindowY + g_ConfigManager.GameWindowHeight / 2;
+
+    // GetFacing wants a point to aim at; the distance does not matter to it, only
+    // the angle, so push it well clear of the centre to keep the angle stable.
+    int direction = g_MouseManager.GetFacing(
+        centerX,
+        centerY,
+        centerX + (int)(g_TouchStick.OffsetX * 256.0f),
+        centerY + (int)(g_TouchStick.OffsetY * 256.0f),
+        1);
+
+    if (direction == 0)
+        direction = 8;
+
+    // Half pushed walks, hard over runs - the same split the mouse gets from its
+    // 190 pixel range.
+    g_PathFinder.Walk(deflection > 0.66f, direction - 1);
+}
+//----------------------------------------------------------------------------------
 static WISP_GEOMETRY::CPoint2Di TouchStickToCursor()
 {
     const float deflection =
@@ -1104,30 +1166,8 @@ void CWindow::ProcessTouch()
             }
         }
 
-        if (g_Stick.Moving)
-        {
-            // Nothing to drive while it is being carried.
-        }
-        else if (TouchStickCentred())
-        {
-            if (g_Stick.RightDown)
-            {
-                g_Stick.RightDown = false;
-                TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, TouchStickToCursor());
-            }
-        }
-        else
-        {
-            const WISP_GEOMETRY::CPoint2Di at = TouchStickToCursor();
-            WISP_MOUSE::g_WispMouse->UseTouchPosition = true;
-            WISP_MOUSE::g_WispMouse->TouchPosition = at;
-
-            if (!g_Stick.RightDown)
-            {
-                g_Stick.RightDown = true;
-                TouchMouseEvent(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_RIGHT, at);
-            }
-        }
+        if (!g_Stick.Moving && !TouchStickCentred() && g_GameState >= GS_GAME)
+            TouchStickWalk();
     }
 
     // Nothing is touching the screen, yet the client still believes a button is
@@ -1163,9 +1203,6 @@ void CWindow::ProcessTouch()
         if (g_Touch.RightDown)
             TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, g_Touch.Current);
 
-        if (g_Stick.RightDown)
-            TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, TouchStickToCursor());
-
         if (g_Stick.Moving)
             SaveTouchStickPlacement();
 
@@ -1193,19 +1230,7 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
             break;
         }
 
-#if defined(__ANDROID__)
-        case SDL_APP_WILLENTERBACKGROUND:
-        case SDL_APP_TERMINATING:
-        {
-            // A desktop client saves when it is closed. An Android one is rarely
-            // closed - it is swiped away or killed - so nothing was ever written
-            // and gump positions, macros and options were lost every time. This
-            // is the platform's real shutdown, and SDL delivers it while there
-            // is still time to write.
-            g_Orion.SaveLocalConfig(g_PacketManager.ConfigSerial);
-        }
-        break;
-#endif
+
 
         // SDL_WINDOWEVENT_* are subtypes carried in ev.window.event, not event
         // types. They used to be matched against ev.type directly, so none of
@@ -1404,9 +1429,6 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
 
             if (g_Stick.Active && ev.tfinger.fingerId == g_Stick.Finger)
             {
-                if (g_Stick.RightDown)
-                    TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, TouchStickToCursor());
-
                 if (g_Stick.Moving)
                     SaveTouchStickPlacement();
 
