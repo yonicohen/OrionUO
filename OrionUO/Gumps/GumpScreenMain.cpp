@@ -102,6 +102,9 @@ void CGumpScreenMain::UpdateContent()
         ID_MS_PASSWORD, 0x034F, 0x03E3, 0x0021, 335, 385, 190, false, 5, TS_LEFT, 0, 32));
     entry->CheckOnSerial = true;
     m_PasswordFake = &entry->m_Entry;
+
+    // The fields exist now, so anything given on the command line can go in.
+    g_MainScreen.ApplyPendingAccounting();
 }
 //----------------------------------------------------------------------------------
 void CGumpScreenMain::InitToolTip()

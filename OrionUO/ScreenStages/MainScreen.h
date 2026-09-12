@@ -67,6 +67,15 @@ public:
 
     void SetAccounting(const string &account, const string &password);
 
+    // Credentials given on the command line arrive before the login gump has
+    // built the fields they belong in, and the gump then replaces those fields
+    // with empty ones - so they are kept here and applied once it has.
+    string m_PendingAccount;
+    string m_PendingPassword;
+    bool m_HavePendingAccounting{ false };
+
+    void ApplyPendingAccounting();
+
     void Paste();
 
     /*!
