@@ -257,6 +257,11 @@ public:
 	*/
     virtual void Render(bool mode);
 
+#if defined(__ANDROID__)
+    // The on-screen movement stick; see WISP_WINDOW::CTouchStick.
+    void DrawTouchStick();
+#endif
+
     virtual void OnLeftMouseButtonDown();
     virtual void OnLeftMouseButtonUp();
     virtual bool OnLeftMouseButtonDoubleClick();

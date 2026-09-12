@@ -9,6 +9,7 @@
 namespace WISP_WINDOW
 {
 CWindow *g_WispWindow = nullptr;
+CTouchStick g_TouchStick;
 //---------------------------------------------------------------------------
 #if USE_WISP
 LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -759,19 +760,17 @@ namespace
 {
 // The client is written for a two-button mouse: the left button selects, drags
 // and double-clicks, and walking is the right button held down in the direction
-// to move. A touch screen has neither button, so gestures stand in:
+// to move.
 //
-//   tap                 left click - and a second tap inside the double-click
-//                       window is a double click, which is how items are used
-//   drag                left button held, for moving gumps and items
-//   press and hold      right button held: walk towards the finger, steering by
-//                       moving it, until the finger lifts
-//
-// A press only becomes a hold once TouchHoldDelay has passed with the finger
-// still roughly in place, which is what keeps a tap and a drag distinguishable
-// from the start of a walk.
-const uint TouchHoldDelay = 350; // ms before a press starts walking
+// A finger only ever stands in for the left button here - tap to click, drag to
+// drag - so that touching the world does what touching it looks like it should.
+// Walking is the on-screen stick instead, which is both easier to aim and does
+// not fight everything else a press might have meant.
 const int TouchSlop = 16;        // pixels of travel before a press is a drag
+
+// How long the stick has to be held still, thumb centred, before it stops
+// steering and starts being dragged somewhere else.
+const uint StickMoveDelay = 600;
 
 struct
 {
@@ -783,6 +782,36 @@ struct
     WISP_GEOMETRY::CPoint2Di Start;
     WISP_GEOMETRY::CPoint2Di Current;
 } g_Touch;
+
+// The stick is tracked separately so it can be worked at the same time as a tap
+// or a drag somewhere else - walking while picking something up.
+struct
+{
+    SDL_FingerID Finger = 0;
+    bool Active = false;
+    bool RightDown = false;
+    bool Moving = false;
+    uint DownTicks = 0;
+} g_Stick;
+
+// Where the ring has been dragged to, as a fraction of the window so it keeps
+// its place across a rotation. Negative means "never moved, use the default".
+float g_StickPlaceX = -1.0f;
+float g_StickPlaceY = -1.0f;
+bool g_StickPlaceLoaded = false;
+SDL_FingerID g_ButtonFinger = 0;
+
+// Where the stick sits, and how hard it has to be pushed. The ring is parked in
+// the bottom-left corner of the window, out of the way of the status bar and
+// paperdoll, which the client puts on the right.
+const int StickMargin = 28;
+const int StickDeadZone = 6; // pixels of deflection that still count as centred
+
+// Deflection maps onto how far the cursor would be from the player. The client
+// walks below roughly two tiles and runs beyond that, so a half-pushed stick
+// walks and a fully pushed one runs.
+const int StickWalkDistance = 40;
+const int StickRunDistance = 190;
 
 // Finger coordinates are fractions of the window; the client works in the same
 // units SDL_GetMouseState reports, so scale them by the window size.
@@ -833,6 +862,32 @@ void CWindow::TouchMouseEvent(uint type, uchar button, const WISP_GEOMETRY::CPoi
 #endif
 }
 //----------------------------------------------------------------------------------
+#if defined(__ANDROID__)
+#include <jni.h>
+
+static void AndroidSetImmersive(bool immersive)
+{
+    JNIEnv *env = (JNIEnv *)SDL_AndroidGetJNIEnv();
+    jobject activity = (jobject)SDL_AndroidGetActivity();
+    if (env == nullptr || activity == nullptr)
+        return;
+
+    jclass cls = env->GetObjectClass(activity);
+    if (cls != nullptr)
+    {
+        jmethodID method = env->GetStaticMethodID(cls, "setImmersiveMode", "(Z)V");
+        if (method != nullptr)
+            env->CallStaticVoidMethod(cls, method, (jboolean)immersive);
+        else
+            env->ExceptionClear();
+
+        env->DeleteLocalRef(cls);
+    }
+
+    env->DeleteLocalRef(activity);
+}
+#endif
+//----------------------------------------------------------------------------------
 void CWindow::ToggleTextInput()
 {
     m_TextInputRequested = !m_TextInputRequested;
@@ -844,32 +899,237 @@ void CWindow::UpdateTextInput(bool wanted)
     wanted = wanted || m_TextInputRequested;
 
     // Toggling this is what shows and hides the soft keyboard, so only ask for
-    // it while something is actually going to receive the typing.
-    if (wanted == m_TextInputActive)
+    // it while something is actually going to receive the typing - but a tap
+    // re-asks even when nothing has changed, because the keyboard may have been
+    // dismissed without the client hearing about it.
+    const bool changed = (wanted != m_TextInputActive);
+    if (!changed && !m_TextInputDirty)
         return;
 
+    m_TextInputDirty = false;
     m_TextInputActive = wanted;
+
+    // Immersive fullscreen leaves the keyboard with nowhere to draw - see
+    // OrionActivity.setImmersiveMode - so step out of it first and back afterwards.
+    AndroidSetImmersive(!wanted);
 
     if (wanted)
         SDL_StartTextInput();
-    else
+    else if (changed)
         SDL_StopTextInput();
 #else
     (void)wanted;
 #endif
 }
 //----------------------------------------------------------------------------------
+#if defined(__ANDROID__)
+static os_path TouchStickPlacementPath()
+{
+    return g_App.ExeFilePath("touchstick.txt");
+}
+
+static void LoadTouchStickPlacement()
+{
+    g_StickPlaceLoaded = true;
+
+    FILE *file = fopen(StringFromPath(TouchStickPlacementPath()).c_str(), "r");
+    if (file == nullptr)
+        return;
+
+    float x = -1.0f;
+    float y = -1.0f;
+    if (fscanf(file, "%f %f", &x, &y) == 2 && x >= 0.0f && x <= 1.0f && y >= 0.0f && y <= 1.0f)
+    {
+        g_StickPlaceX = x;
+        g_StickPlaceY = y;
+    }
+
+    fclose(file);
+}
+
+static void SaveTouchStickPlacement()
+{
+    FILE *file = fopen(StringFromPath(TouchStickPlacementPath()).c_str(), "w");
+    if (file == nullptr)
+        return;
+
+    fprintf(file, "%.4f %.4f\n", g_StickPlaceX, g_StickPlaceY);
+    fclose(file);
+}
+
+// Places the ring, and says whether it should be on screen at all - only in the
+// world, where walking means anything.
+static void UpdateTouchStickBounds()
+{
+    if (g_WispWindow == nullptr)
+        return;
+
+    if (!g_StickPlaceLoaded)
+        LoadTouchStickPlacement();
+
+    const WISP_GEOMETRY::CSize size = g_WispWindow->GetSize();
+    const int shorter = (size.Width < size.Height) ? size.Width : size.Height;
+
+    g_TouchStick.Radius = shorter / 7;
+    if (g_TouchStick.Radius < 70)
+        g_TouchStick.Radius = 70;
+
+    if (g_StickPlaceX >= 0.0f)
+    {
+        g_TouchStick.CenterX = (int)(g_StickPlaceX * size.Width);
+        g_TouchStick.CenterY = (int)(g_StickPlaceY * size.Height);
+    }
+    else
+    {
+        // Bottom left by default: the client puts the status bar and paperdoll
+        // on the right.
+        g_TouchStick.CenterX = g_TouchStick.Radius + StickMargin;
+        g_TouchStick.CenterY = size.Height - g_TouchStick.Radius - StickMargin;
+    }
+
+    g_TouchStick.ButtonRadius = g_TouchStick.Radius / 3;
+    g_TouchStick.ButtonX = g_TouchStick.CenterX;
+    g_TouchStick.ButtonY =
+        g_TouchStick.CenterY - g_TouchStick.Radius - g_TouchStick.ButtonRadius - 14;
+
+    // Flipped below the ring if there is no room above it.
+    if (g_TouchStick.ButtonY - g_TouchStick.ButtonRadius < 0)
+    {
+        g_TouchStick.ButtonY =
+            g_TouchStick.CenterY + g_TouchStick.Radius + g_TouchStick.ButtonRadius + 14;
+    }
+
+    g_TouchStick.Visible = (g_GameState >= GS_GAME);
+    g_TouchStick.Active = g_Stick.Active;
+    g_TouchStick.Moving = g_Stick.Moving;
+}
+
+// Drops the ring wherever the finger is, kept fully on screen.
+static void TouchStickPlaceAt(const WISP_GEOMETRY::CPoint2Di &at)
+{
+    if (g_WispWindow == nullptr)
+        return;
+
+    const WISP_GEOMETRY::CSize size = g_WispWindow->GetSize();
+    const int edge = g_TouchStick.Radius + 4;
+
+    int x = at.X;
+    int y = at.Y;
+
+    if (x < edge)
+        x = edge;
+    if (y < edge)
+        y = edge;
+    if (x > size.Width - edge)
+        x = size.Width - edge;
+    if (y > size.Height - edge)
+        y = size.Height - edge;
+
+    g_TouchStick.CenterX = x;
+    g_TouchStick.CenterY = y;
+    g_StickPlaceX = (float)x / (float)size.Width;
+    g_StickPlaceY = (float)y / (float)size.Height;
+}
+
+// Turns the knob's deflection into the cursor position the client would see if
+// someone were holding the right button that far from their character.
+static WISP_GEOMETRY::CPoint2Di TouchStickToCursor()
+{
+    const float deflection =
+        sqrtf(g_TouchStick.OffsetX * g_TouchStick.OffsetX +
+              g_TouchStick.OffsetY * g_TouchStick.OffsetY);
+
+    const float distance =
+        StickWalkDistance + deflection * (StickRunDistance - StickWalkDistance);
+
+    const int centerX = g_RenderBounds.GameWindowPosX + g_RenderBounds.GameWindowWidth / 2;
+    const int centerY = g_RenderBounds.GameWindowPosY + g_RenderBounds.GameWindowHeight / 2;
+
+    // Normalised so the direction is what the deflection says even when the
+    // knob is only nudged; distance carries the speed.
+    const float length = (deflection > 0.0001f) ? deflection : 1.0f;
+
+    return WISP_GEOMETRY::CPoint2Di(
+        centerX + (int)(g_TouchStick.OffsetX / length * distance),
+        centerY + (int)(g_TouchStick.OffsetY / length * distance));
+}
+
+// Feeds the finger's position into the knob, clamped to the ring.
+static void TouchStickSetFrom(const WISP_GEOMETRY::CPoint2Di &at)
+{
+    float dx = (float)(at.X - g_TouchStick.CenterX);
+    float dy = (float)(at.Y - g_TouchStick.CenterY);
+
+    const float distance = sqrtf(dx * dx + dy * dy);
+    if (distance > (float)g_TouchStick.Radius)
+    {
+        dx = dx / distance * (float)g_TouchStick.Radius;
+        dy = dy / distance * (float)g_TouchStick.Radius;
+    }
+
+    g_TouchStick.OffsetX = dx / (float)g_TouchStick.Radius;
+    g_TouchStick.OffsetY = dy / (float)g_TouchStick.Radius;
+}
+
+static bool TouchStickCentred()
+{
+    const float deflection =
+        sqrtf(g_TouchStick.OffsetX * g_TouchStick.OffsetX +
+              g_TouchStick.OffsetY * g_TouchStick.OffsetY);
+
+    return deflection * g_TouchStick.Radius < StickDeadZone;
+}
+#endif
+//----------------------------------------------------------------------------------
 void CWindow::ProcessTouch()
 {
 #if defined(__ANDROID__)
-    if (!g_Touch.Active || g_Touch.LeftDown || g_Touch.RightDown)
-        return;
+    UpdateTouchStickBounds();
 
-    if (SDL_GetTicks() - g_Touch.StartTicks < TouchHoldDelay)
-        return;
+    // The stick has to keep pushing: the client walks a step per right-button
+    // poll, and a finger held still on the ring sends no events.
+    if (g_Stick.Active)
+    {
+        // Held still in the middle rather than pushed: the thumb is not
+        // steering, so take it as a request to put the ring somewhere else.
+        if (!g_Stick.Moving && TouchStickCentred() &&
+            SDL_GetTicks() - g_Stick.DownTicks >= StickMoveDelay)
+        {
+            g_Stick.Moving = true;
 
-    g_Touch.RightDown = true;
-    TouchMouseEvent(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_RIGHT, g_Touch.Current);
+            if (g_Stick.RightDown)
+            {
+                g_Stick.RightDown = false;
+                TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, TouchStickToCursor());
+            }
+        }
+
+        if (g_Stick.Moving)
+        {
+            // Nothing to drive while it is being carried.
+        }
+        else if (TouchStickCentred())
+        {
+            if (g_Stick.RightDown)
+            {
+                g_Stick.RightDown = false;
+                TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, TouchStickToCursor());
+            }
+        }
+        else
+        {
+            const WISP_GEOMETRY::CPoint2Di at = TouchStickToCursor();
+            WISP_MOUSE::g_WispMouse->UseTouchPosition = true;
+            WISP_MOUSE::g_WispMouse->TouchPosition = at;
+
+            if (!g_Stick.RightDown)
+            {
+                g_Stick.RightDown = true;
+                TouchMouseEvent(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_RIGHT, at);
+            }
+        }
+    }
+
 #endif
 }
 //----------------------------------------------------------------------------------
@@ -963,6 +1223,44 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
 #if defined(__ANDROID__)
         case SDL_FINGERDOWN:
         {
+            const WISP_GEOMETRY::CPoint2Di down = TouchToWindow(ev.tfinger.x, ev.tfinger.y);
+
+            // The war toggle sits beside the stick and takes precedence over it.
+            if (g_TouchStick.Visible && !g_TouchStick.ButtonHeld)
+            {
+                const int dx = down.X - g_TouchStick.ButtonX;
+                const int dy = down.Y - g_TouchStick.ButtonY;
+                const int reach = g_TouchStick.ButtonRadius + g_TouchStick.ButtonRadius / 2;
+
+                if (dx * dx + dy * dy <= reach * reach)
+                {
+                    g_TouchStick.ButtonHeld = true;
+                    g_ButtonFinger = ev.tfinger.fingerId;
+                    break;
+                }
+            }
+
+            // The stick takes the finger before any of the gesture logic does,
+            // and keeps its own, so walking and handling something at the same
+            // time are two separate fingers rather than a conflict.
+            if (g_TouchStick.Visible && !g_Stick.Active)
+            {
+                const int dx = down.X - g_TouchStick.CenterX;
+                const int dy = down.Y - g_TouchStick.CenterY;
+                const int reach = g_TouchStick.Radius + g_TouchStick.Radius / 3;
+
+                if (dx * dx + dy * dy <= reach * reach)
+                {
+                    g_Stick.Finger = ev.tfinger.fingerId;
+                    g_Stick.Active = true;
+                    g_Stick.RightDown = false;
+                    g_Stick.Moving = false;
+                    g_Stick.DownTicks = SDL_GetTicks();
+                    TouchStickSetFrom(down);
+                    break;
+                }
+            }
+
             if (g_Touch.Active)
             {
                 // A second finger while the first is still deciding what it is:
@@ -983,7 +1281,7 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
             g_Touch.LeftDown = false;
             g_Touch.RightDown = false;
             g_Touch.StartTicks = SDL_GetTicks();
-            g_Touch.Start = TouchToWindow(ev.tfinger.x, ev.tfinger.y);
+            g_Touch.Start = down;
             g_Touch.Current = g_Touch.Start;
 
             // Nothing is sent yet: which button this is depends on what the
@@ -996,6 +1294,18 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
 
         case SDL_FINGERMOTION:
         {
+            if (g_Stick.Active && ev.tfinger.fingerId == g_Stick.Finger)
+            {
+                const WISP_GEOMETRY::CPoint2Di at = TouchToWindow(ev.tfinger.x, ev.tfinger.y);
+
+                if (g_Stick.Moving)
+                    TouchStickPlaceAt(at);
+                else
+                    TouchStickSetFrom(at);
+
+                break;
+            }
+
             if (!g_Touch.Active || ev.tfinger.fingerId != g_Touch.Finger)
                 break;
 
@@ -1022,6 +1332,29 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
 
         case SDL_FINGERUP:
         {
+            if (g_TouchStick.ButtonHeld && ev.tfinger.fingerId == g_ButtonFinger)
+            {
+                g_TouchStick.ButtonHeld = false;
+                g_Orion.ChangeWarmode(0xFF);
+                break;
+            }
+
+            if (g_Stick.Active && ev.tfinger.fingerId == g_Stick.Finger)
+            {
+                if (g_Stick.RightDown)
+                    TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_RIGHT, TouchStickToCursor());
+
+                if (g_Stick.Moving)
+                    SaveTouchStickPlacement();
+
+                g_Stick.Active = false;
+                g_Stick.RightDown = false;
+                g_Stick.Moving = false;
+                g_TouchStick.OffsetX = 0.0f;
+                g_TouchStick.OffsetY = 0.0f;
+                break;
+            }
+
             if (!g_Touch.Active || ev.tfinger.fingerId != g_Touch.Finger)
                 break;
 
@@ -1038,6 +1371,11 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
                 // together so the double-click timer sees a complete click.
                 TouchMouseEvent(SDL_MOUSEBUTTONDOWN, SDL_BUTTON_LEFT, at);
                 TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, at);
+
+                // Whatever the tap landed on, re-ask for the keyboard if a text
+                // field ends up focused: tapping a field the client already
+                // considered focused is exactly how someone brings it back.
+                m_TextInputDirty = true;
             }
 
             g_Touch.Active = false;

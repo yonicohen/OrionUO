@@ -76,6 +76,51 @@ public class OrionActivity extends SDLActivity
     }
 
     /**
+     * Lets the soft keyboard have somewhere to draw.
+     *
+     * SDL puts the activity in sticky immersive fullscreen. On Android 16 with
+     * edge-to-edge enforced the IME then never gets a surface - the window
+     * manager reports the input method window as GONE with NO_SURFACE while the
+     * input method service believes it is showing, so asking for the keyboard
+     * appears to work and nothing comes up. Leaving immersive mode while text
+     * is being entered gives it room; going back afterwards restores the
+     * fullscreen game view.
+     */
+    public static void setImmersiveMode(final boolean immersive)
+    {
+        if (mSingleton == null)
+            return;
+
+        mSingleton.runOnUiThread(new Runnable()
+        {
+            @Override
+            public void run()
+            {
+                try
+                {
+                    View decor = mSingleton.getWindow().getDecorView();
+                    int flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+
+                    if (immersive)
+                    {
+                        flags |= View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY;
+                    }
+
+                    decor.setSystemUiVisibility(flags);
+                }
+                catch (Exception e)
+                {
+                    android.util.Log.w("OrionUO", "could not change immersive mode: " + e);
+                }
+            }
+        });
+    }
+
+    /**
      * Height in pixels of the soft keyboard, or 0 when it is down.
      *
      * SDL draws into a SurfaceView that keeps the full window, so the keyboard

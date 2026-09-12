@@ -5,6 +5,38 @@
 namespace WISP_WINDOW
 {
 //----------------------------------------------------------------------------------
+// On-screen movement stick.
+//
+// Walking in UO is the right mouse button held down in the direction to go,
+// which press-and-hold reproduces - but that means holding a finger over the
+// world you are trying to look at, and it fights every other thing a press
+// might mean. The stick is the familiar touch-game answer: a ring parked in the
+// corner that stands in for the cursor's offset from the player.
+//
+// The window layer owns the geometry and the finger tracking; CGameScreen draws
+// it, because it is the only thing that knows the world is on screen.
+struct CTouchStick
+{
+    bool Visible = false;
+    bool Active = false;
+    // Being carried to a new spot rather than steered.
+    bool Moving = false;
+    int CenterX = 0;
+    int CenterY = 0;
+    int Radius = 0;
+    // Deflection of the knob, each -1..1.
+    float OffsetX = 0.0f;
+    float OffsetY = 0.0f;
+
+    // War/peace toggle, parked just above the ring. UO puts this on the
+    // paperdoll, which is a long reach from a thumb on the stick.
+    int ButtonX = 0;
+    int ButtonY = 0;
+    int ButtonRadius = 0;
+    bool ButtonHeld = false;
+};
+extern CTouchStick g_TouchStick;
+//----------------------------------------------------------------------------------
 class CWindow
 {
 public:
@@ -89,6 +121,11 @@ public:
 private:
     bool m_TextInputActive = false;
     bool m_TextInputRequested = false;
+    // The keyboard can be dismissed behind the client's back - the Back button,
+    // a swipe - and nothing says so. Acting only on changes then left the state
+    // stuck at "shown" and every later tap on a field did nothing, so a tap
+    // always re-asks.
+    bool m_TextInputDirty = false;
     void TouchMouseEvent(uint type, uchar button, const WISP_GEOMETRY::CPoint2Di &at);
 
 public:

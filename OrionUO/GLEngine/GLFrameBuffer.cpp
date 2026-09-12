@@ -11,6 +11,20 @@
 //----------------------------------------------------------------------------------
 #include "stdafx.h"
 //----------------------------------------------------------------------------------
+namespace
+{
+// Framebuffer names are recycled rather than deleted.
+//
+// glDeleteFramebuffers crashes inside the Android emulator's GL encoder, in
+// GLClientState::removeFramebuffers, and a gump is destroyed every time one is
+// closed - so closing the paperdoll took the client with it. Handing the name
+// back to a pool sidesteps that path entirely, and on every platform it saves
+// churning names for gumps that open and close constantly. The colour texture,
+// which is the part that actually holds memory, is still freed.
+std::vector<GLuint> g_FreeFrameBuffers;
+const size_t MaxPooledFrameBuffers = 32;
+} // namespace
+//----------------------------------------------------------------------------------
 CGLFrameBuffer::CGLFrameBuffer()
 {
     WISPFUN_DEBUG("c30_f1");
@@ -63,7 +77,15 @@ bool CGLFrameBuffer::Init(int width, int height)
         glGetIntegerv(GL_FRAMEBUFFER_BINDING, &currentFrameBuffer);
 
         if (m_FrameBuffer == 0)
-            glGenFramebuffers(1, &m_FrameBuffer);
+        {
+            if (!g_FreeFrameBuffers.empty())
+            {
+                m_FrameBuffer = g_FreeFrameBuffers.back();
+                g_FreeFrameBuffers.pop_back();
+            }
+            else
+                glGenFramebuffers(1, &m_FrameBuffer);
+        }
 
         glBindFramebuffer(GL_FRAMEBUFFER, m_FrameBuffer);
 
@@ -96,7 +118,11 @@ void CGLFrameBuffer::Free()
 
     if (g_GL.CanUseFrameBuffer && m_FrameBuffer != 0)
     {
-        glDeleteFramebuffers(1, &m_FrameBuffer);
+        if (g_FreeFrameBuffers.size() < MaxPooledFrameBuffers)
+            g_FreeFrameBuffers.push_back(m_FrameBuffer);
+        else
+            glDeleteFramebuffers(1, &m_FrameBuffer);
+
         m_FrameBuffer = 0;
     }
 

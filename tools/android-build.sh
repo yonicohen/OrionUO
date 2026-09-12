@@ -55,6 +55,13 @@ flags=(
     # -g costs only file size in the .so and makes a crash address on device
     # resolve to a line instead of a guess.
     -std=c++17 -O2 -g -fPIC
+    # UO stores tile heights, and a good deal else, in a signed byte that the
+    # .mul structs declare as plain char. That is signed on x86, which is where
+    # every other build of this client runs, and unsigned on ARM - so a Z of -6
+    # read back as 250 and stretched the land quad hundreds of pixels down the
+    # screen. Matching the other platforms fixes the whole class at once rather
+    # than chasing each struct.
+    -fsigned-char
     -DORION_GLES -DORION_CMAKE -DORION_POSIX -DUSE_ORIONDLL=0 -DUSE_WISP=0
     -D__STDC_CONSTANT_MACROS -D__STDC_LIMIT_MACROS -DNDEBUG
     -I"$prefix/include" -I"$prefix/include/SDL2" -I"$repo/build"

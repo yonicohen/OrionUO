@@ -963,6 +963,24 @@ void CGameScreen::CalculateGameWindowBounds()
     int oldDrawOffsetX = g_RenderBounds.WindowDrawOffsetX;
     int oldDrawOffsetY = g_RenderBounds.WindowDrawOffsetY;
 
+#if defined(__ANDROID__)
+    // The game window is a resizable panel on the desktop, with the rest of the
+    // screen left as somewhere to park gumps. There is no way to resize it by
+    // touch and no second monitor's worth of room to spare, so it takes the
+    // whole display instead - otherwise a phone shows a small world view in the
+    // corner of a large black screen, and holding outside it does not even walk.
+    {
+        const WISP_GEOMETRY::CSize size = g_OrionWindow.GetSize();
+        const int borderX = 6;  // the window's own frame art
+        const int borderY = 26; // and the top menu bar above it
+
+        g_ConfigManager.GameWindowX = borderX;
+        g_ConfigManager.GameWindowY = borderY;
+        g_ConfigManager.GameWindowWidth = size.Width - borderX * 2;
+        g_ConfigManager.GameWindowHeight = size.Height - borderY - borderX;
+    }
+#endif
+
     g_RenderBounds.GameWindowPosX = g_ConfigManager.GameWindowX;
     g_RenderBounds.GameWindowPosY = g_ConfigManager.GameWindowY;
 
@@ -1586,6 +1604,55 @@ void CGameScreen::PrepareContent()
 @param [__in] mode true - отрисовка, false - выбор
 @return При выборе объектов - идентификатор выбранного объекта
 */
+#if defined(__ANDROID__)
+void CGameScreen::DrawTouchStick()
+{
+    using WISP_WINDOW::g_TouchStick;
+
+    if (!g_TouchStick.Visible || g_TouchStick.Radius <= 0)
+        return;
+
+    const float centerX = (float)g_TouchStick.CenterX;
+    const float centerY = (float)g_TouchStick.CenterY;
+    const float radius = (float)g_TouchStick.Radius;
+
+    // Faint while it is being used, fainter while it is not: it sits over the
+    // world and is only worth looking at when a thumb is on it.
+    const float ringAlpha = g_TouchStick.Active ? 0.30f : 0.17f;
+
+    glColor4f(0.0f, 0.0f, 0.0f, ringAlpha);
+    g_GL.DrawCircle(centerX, centerY, radius, 0);
+
+    glColor4f(1.0f, 1.0f, 1.0f, ringAlpha);
+    g_GL.DrawCircle(centerX, centerY, radius * 0.94f, 1);
+
+    const float knobRadius = radius * 0.38f;
+    const float knobX = centerX + g_TouchStick.OffsetX * (radius - knobRadius);
+    const float knobY = centerY + g_TouchStick.OffsetY * (radius - knobRadius);
+
+    glColor4f(1.0f, 1.0f, 1.0f, g_TouchStick.Active ? 0.55f : 0.30f);
+    g_GL.DrawCircle(knobX, knobY, knobRadius, 0);
+
+    // War/peace toggle: red while at war, so a glance at the thumb says which
+    // it is without reading the paperdoll.
+    const float buttonRadius = (float)g_TouchStick.ButtonRadius;
+    const bool atWar = (g_Player != NULL && g_Player->Warmode);
+
+    glColor4f(0.0f, 0.0f, 0.0f, 0.30f);
+    g_GL.DrawCircle((float)g_TouchStick.ButtonX, (float)g_TouchStick.ButtonY, buttonRadius, 0);
+
+    if (atWar)
+        glColor4f(0.85f, 0.15f, 0.15f, 0.75f);
+    else
+        glColor4f(0.75f, 0.75f, 0.75f, 0.40f);
+
+    g_GL.DrawCircle(
+        (float)g_TouchStick.ButtonX, (float)g_TouchStick.ButtonY, buttonRadius * 0.82f, 0);
+
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+}
+//----------------------------------------------------------------------------------
+#endif
 void CGameScreen::Render(bool mode)
 {
     WISPFUN_DEBUG("c164_f19");
@@ -1736,6 +1803,10 @@ void CGameScreen::Render(bool mode)
         g_GL.RestorePort();
 
         m_GameScreenGump.Draw();
+
+#if defined(__ANDROID__)
+        DrawTouchStick();
+#endif
 
 #if UO_DEBUG_INFO != 0
         if (g_DeveloperMode == DM_SHOW_FPS_ONLY)
