@@ -81,14 +81,35 @@ pids=()
 failed="$outdir/failed.txt"
 : > "$failed"
 
+# A .cpp being older than its .o is not enough to skip it: a header it includes
+# may have changed, and it silently did - once leaving a library whose callers
+# still expected an old constructor signature, which only showed up as an
+# unresolved symbol at link time. The compiler records what each object actually
+# depended on in a .d file; if any of those is newer, rebuild.
+needs_rebuild() {
+    local obj="$1" src="$2" dep="$1.d"
+
+    [[ -f "$obj" ]] || return 0
+    [[ "$obj" -nt "$src" ]] || return 0
+    [[ -f "$dep" ]] || return 0
+
+    local header
+    # The .d is "target: a.h b.h \" continuation lines; the paths are what matter.
+    for header in $(tr -d '\\' < "$dep" | tr ' ' '\n' | grep -v ':$' | grep -v '^$'); do
+        [[ -f "$header" && "$header" -nt "$obj" ]] && return 0
+    done
+
+    return 1
+}
+
 for src in $sources; do
     rel="${src#$repo/OrionUO/}"
     obj="$objdir/$(echo "$rel" | tr '/' '_' | sed 's/\.cpp$/.o/')"
-    if [[ -f "$obj" && "$obj" -nt "$src" ]]; then
+    if ! needs_rebuild "$obj" "$src"; then
         continue
     fi
     (
-        if ! "$cxx" -c "${flags[@]}" -o "$obj" "$src" 2>"$obj.err"; then
+        if ! "$cxx" -c "${flags[@]}" -MD -MF "$obj.d" -o "$obj" "$src" 2>"$obj.err"; then
             echo "$rel" >> "$failed"
             echo "  FAILED $rel" >&2
             head -5 "$obj.err" >&2
