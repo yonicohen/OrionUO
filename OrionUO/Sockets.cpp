@@ -354,7 +354,7 @@ int tcp_select(tcp_socket socket)
     // but never receive. Winsock ignores this argument, which is why it worked
     // on Windows.
     auto r = select(h + 1, &rfds, nullptr, nullptr, &tv);
-    LOG("tcp_select: %d\n", r);
+    LOG_VERBOSE("tcp_select: %d\n", r);
     return r;
 }
 
@@ -364,7 +364,7 @@ int tcp_recv(tcp_socket socket, unsigned char *data, size_t max_size)
     int h = *(int *)socket;
     assert(h != -1);
     auto r = recv(h, data, max_size, 0);
-    LOG("RECV: %d\n", r);
+    LOG_VERBOSE("RECV: %d\n", r);
     LOG_DUMP(data, r);
     return r;
 }
@@ -376,7 +376,7 @@ int tcp_send(tcp_socket socket, unsigned char *data, size_t size)
     assert(h != -1);
 
     auto r = send(h, data, size, 0);
-    LOG("SEND: %d\n", r);
+    LOG_VERBOSE("SEND: %d\n", r);
     LOG_DUMP(data, r);
     return r;
 }

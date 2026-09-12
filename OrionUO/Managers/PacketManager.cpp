@@ -624,7 +624,7 @@ void CPacketManager::OnPacket()
         time(&rawtime);
         localtime_s(&timeinfo, &rawtime);
         strftime(buffer, sizeof(buffer), "%d-%m-%Y %H:%M:%S", &timeinfo);
-        LOG("--- ^(%d) r(+%d => %d) %s Server:: %s\n",
+        LOG_VERBOSE("--- ^(%d) r(+%d => %d) %s Server:: %s\n",
             ticks - g_LastPacketTime,
             Size,
             g_TotalRecvSize,
@@ -709,7 +709,7 @@ void CPacketManager::PluginReceiveHandler(puchar buf, int size)
 
     CPacketInfo &info = m_Packets[*Start];
 
-    LOG("--- ^(%d) r(+%d => %d) Plugin->Client:: %s\n",
+    LOG_VERBOSE("--- ^(%d) r(+%d => %d) Plugin->Client:: %s\n",
         ticks - g_LastPacketTime,
         Size,
         g_TotalRecvSize,

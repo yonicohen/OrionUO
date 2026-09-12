@@ -131,6 +131,7 @@ extern bool g_ShowGumpLocker;
 extern bool g_GrayedPixels;
 
 extern bool g_ConfigLoaded;
+extern bool g_LogVerbose;
 
 extern uchar g_LightLevel;
 extern uchar g_PersonalLightLevel;

@@ -117,7 +117,7 @@ int CConnection::Send(puchar data, int size)
         return 0;
 
     const int sent = tcp_send(m_Socket, data, size);
-    //LOG("CConnection::Send=>%i\n", sent);
+    //LOG_VERBOSE("CConnection::Send=>%i\n", sent);
     return sent;
 }
 //----------------------------------------------------------------------------------
@@ -128,7 +128,7 @@ int CConnection::Send(const UCHAR_LIST &data)
         return 0;
 
     const int sent = Send((puchar)&data[0], (int)data.size());
-    LOG("CConnection::Send=>%i\n", sent);
+    LOG_VERBOSE("CConnection::Send=>%i\n", sent);
     return sent;
 }
 }; // namespace WISP_NETWORK

@@ -121,6 +121,8 @@ int main(int argc, char **argv)
     {
         if (!strcmp(argv[i], "--headless"))
             g_isHeadless = true;
+        else if (!strcmp(argv[i], "--verbose"))
+            g_LogVerbose = true;
         else if (!strcmp(argv[i], "--nocrypt"))
             g_EncryptionType = ET_NOCRYPT;
         else if (!strcmp(argv[i], "--noupscale"))

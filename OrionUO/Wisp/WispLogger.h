@@ -33,6 +33,17 @@ namespace WISP_LOGGER
 #endif //CWISPLOGGER!=0
 #endif
 
+// Per-frame chatter - the socket poll, texture sweeps, packet sizes, the frame
+// counter - drowns everything worth reading, and a session writes megabytes of
+// it. Those calls say LOG_VERBOSE and are silent unless --verbose is passed.
+// Declared outside the namespace so it is the g_LogVerbose Globals.cpp defines.
+#define LOG_VERBOSE(...)                                                                           \
+    do                                                                                             \
+    {                                                                                              \
+        if (::g_LogVerbose)                                                                        \
+            LOG(__VA_ARGS__);                                                                      \
+    } while (0)
+
 #define INITCRASHLOGGER(path) WISP_LOGGER::g_WispCrashLogger.Init(path);
 #define CRASHLOG WISP_LOGGER::g_WispCrashLogger.Print
 #define CRASHLOG_DUMP WISP_LOGGER::g_WispCrashLogger.Dump

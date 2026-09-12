@@ -1021,7 +1021,7 @@ void CAnimationManager::ClearUnusedTextures(uint ticks)
             it++;
     }
 
-    LOG("CAnimationManager::ClearUnusedTextures::removed %i\n", count);
+    LOG_VERBOSE("CAnimationManager::ClearUnusedTextures::removed %i\n", count);
 }
 //----------------------------------------------------------------------------------
 /*!
