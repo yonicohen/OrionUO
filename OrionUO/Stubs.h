@@ -17,7 +17,6 @@
 #endif
 #include <SDL2/SDL.h>
 #include <zlib.h>
-#include <FreeImage.h>
 
 using namespace std;
 
@@ -74,6 +73,17 @@ using namespace std;
 #pragma GCC diagnostic ignored "-Wuninitialized"
 #endif
 
+// DWORD and BOOL used to arrive by way of FreeImage.h, which defines the
+// Windows spellings on POSIX. FreeImage is gone, so they are declared here
+// with the rest of them.
+typedef uint32_t DWORD;
+typedef int BOOL;
+#ifndef FALSE
+#define FALSE 0
+#endif
+#ifndef TRUE
+#define TRUE 1
+#endif
 typedef int SOCKET;
 typedef uint16_t WORD;
 typedef uintptr_t LPARAM;
