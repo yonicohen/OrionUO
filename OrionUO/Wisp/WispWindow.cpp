@@ -834,6 +834,7 @@ WISP_GEOMETRY::CPoint2Di TouchToWindow(float normalizedX, float normalizedY)
 } // namespace
 #endif
 //----------------------------------------------------------------------------------
+bool g_InSyntheticTouchEvent = false;
 void CWindow::TouchMouseEvent(uint type, uchar button, const WISP_GEOMETRY::CPoint2Di &at)
 {
 #if defined(__ANDROID__)
@@ -861,7 +862,9 @@ void CWindow::TouchMouseEvent(uint type, uchar button, const WISP_GEOMETRY::CPoi
         synthetic.button.y = at.Y;
     }
 
+    g_InSyntheticTouchEvent = true;
     OnWindowProc(synthetic);
+    g_InSyntheticTouchEvent = false;
 #else
     (void)type;
     (void)button;
@@ -1213,6 +1216,32 @@ void CWindow::ProcessTouch()
 //----------------------------------------------------------------------------------
 bool CWindow::OnWindowProc(SDL_Event &ev)
 {
+#if defined(__ANDROID__)
+    // Belt and braces for the hint above: whatever SDL decides to synthesise
+    // from a finger is marked with this device id, and the gesture handler has
+    // already turned that same finger into the events the client should see.
+    // Letting both through presses twice, the emulated one at wherever the
+    // cursor happened to be.
+    switch (ev.type)
+    {
+        case SDL_MOUSEMOTION:
+            if (ev.motion.which == SDL_TOUCH_MOUSEID && !g_InSyntheticTouchEvent)
+                return true;
+            break;
+        case SDL_MOUSEBUTTONDOWN:
+        case SDL_MOUSEBUTTONUP:
+            if (ev.button.which == SDL_TOUCH_MOUSEID && !g_InSyntheticTouchEvent)
+                return true;
+            break;
+        case SDL_MOUSEWHEEL:
+            if (ev.wheel.which == SDL_TOUCH_MOUSEID)
+                return true;
+            break;
+        default:
+            break;
+    }
+#endif
+
     switch (ev.type)
     {
         case SDL_QUIT:

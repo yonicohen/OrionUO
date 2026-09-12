@@ -65,6 +65,9 @@ class CDeathShader : public CGLShader
 public:
     CDeathShader();
 
+    //A greyscale texture environment on GLES, a program everywhere else.
+    virtual bool Use();
+
     //Инициализировать шейдер
     virtual bool Init(const char *vertexShaderData, const char *fragmentShaderData);
 };

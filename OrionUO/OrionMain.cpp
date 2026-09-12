@@ -113,6 +113,18 @@ int main(int argc, char **argv)
     WISPFUN_DEBUG();
     std::set_terminate(OnTerminate);
 
+#if defined(__ANDROID__)
+    // COrionWindow translates finger gestures itself - a press and hold has to
+    // become the right button, which SDL's own synthesis cannot express - so its
+    // left-button-only version of the same touches is turned off rather than
+    // arriving alongside. This used to be set only in the Win32 entry point,
+    // where nothing needed it, and never on Android, where everything did: SDL's
+    // emulated press arrived before the gesture had been read and carried the
+    // cursor's previous position, so every tap pressed whatever the last touch
+    // had been on - which is what made gumps jump to the tapped point.
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+#endif
+
     // LOG() is fprintf(stdout, ...) here. Redirected to a file, stdout is block
     // buffered, so up to 8 KB of output - which can be minutes of a session, and
     // is exactly the part you want when something goes wrong - sits unwritten
