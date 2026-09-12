@@ -157,10 +157,10 @@ elif [[ "$os" == "Linux" ]]; then
             printf '        %s\n' $missing
             say
             say "    On Debian/Ubuntu:"
-            say "        sudo apt-get install libsdl2-2.0-0 libsdl2-image-2.0-0 \\"
-            say "            libsdl2-mixer-2.0-0 libfreeimage3 libglew2.2 libglu1-mesa"
+            say "        sudo apt-get install libsdl2-2.0-0 libsdl2-mixer-2.0-0 \\"
+            say "            libglew2.2 libglu1-mesa"
             say "    On Fedora:"
-            say "        sudo dnf install SDL2 SDL2_image SDL2_mixer freeimage glew mesa-libGLU"
+            say "        sudo dnf install SDL2 SDL2_mixer glew mesa-libGLU"
             say
             die "install the libraries above, then run this script again"
         fi

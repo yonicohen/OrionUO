@@ -74,7 +74,6 @@ if(ORION_WINDOWS)
 	set(ZLIB_LIBRARIES "${DEP_LIB_DIR}zlib.lib")
 
 	set(FREEIMAGE_INCLUDE_DIR "${DEP_INCLUDE_DIR}")
-	set(FREEIMAGE_LIBRARIES "${DEP_LIB_DIR}freeimage.lib")
 
 	#set(OPENGL_INCLUDE_DIR "${DEP_INCLUDE_DIR}")
 	#set(OPENGL_LIBRARIES "${DEP_LIB_DIR}")
@@ -110,7 +109,8 @@ else()
 	endif()
 	set(SDL2_MIXER_LIBRARIES ${SDL2MIXER_LIBRARY})
 	set(SDL2_MIXER_INCLUDE_DIRS ${SDL2MIXER_INCLUDE_DIR})
-	find_package(FreeImage REQUIRED)
+	# FreeImage is gone: screenshots use third_party/stb_image_write.h, which is
+	# MIT/public domain, against FreeImage's FIPL/GPL dual licence.
 	find_package(GLEW REQUIRED)
 	# Modern glew ships a config-module exporting only the GLEW::GLEW target,
 	# leaving the legacy GLEW_LIBRARIES/GLEW_LIBRARY variables unset.
@@ -131,7 +131,7 @@ include_directories(${ZLIB_INCLUDE_DIRS})
 include_directories(${SDL2_INCLUDE_DIRS})
 include_directories(${SDL2_IMAGE_INCLUDE_DIR})
 include_directories(${SDL2_MIXER_INCLUDE_DIRS})
-include_directories(${FREEIMAGE_INCLUDE_DIR})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 include_directories(${GLEW_INCLUDE_DIR})
 #
 # Project Files

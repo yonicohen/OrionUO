@@ -443,7 +443,7 @@ else()
 # Homebrew it is the one dependency built against sdl2-compat while sdl2_mixer
 # is built against SDL2 proper - linking both put two SDL2 implementations, each
 # with its own globals and event queue, into one process.
-target_link_libraries(OrionUO PUBLIC ${SDL2_LIBRARIES} ${SDL2_MIXER_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENGL_LIBRARIES} ${FREEIMAGE_LIBRARIES} ${GLEW_LIBRARIES} ${THREAD})
+target_link_libraries(OrionUO PUBLIC ${SDL2_LIBRARIES} ${SDL2_MIXER_LIBRARIES} ${ZLIB_LIBRARIES} ${OPENGL_LIBRARIES} ${GLEW_LIBRARIES} ${THREAD})
 endif()
 
 orion_precompile(OrionUO)

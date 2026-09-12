@@ -59,7 +59,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew update
-          brew install cmake ninja sdl2 sdl2_image sdl2_mixer freeimage glew
+          brew install cmake ninja sdl2 sdl2_mixer glew
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
@@ -67,8 +67,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             ninja-build cmake \
-            libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev \
-            libfreeimage-dev libglew-dev libglu1-mesa-dev xorg-dev
+            libsdl2-dev libsdl2-mixer-dev \
+            libglew-dev libglu1-mesa-dev xorg-dev
 
       - name: Build (Unix)
         if: runner.os != 'Windows'

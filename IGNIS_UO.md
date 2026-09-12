@@ -117,14 +117,14 @@ package directory, or right-click the binary and choose *Open* once.
 command. It is normally:
 
 ```bash
-brew install sdl2 sdl2_image sdl2_mixer freeimage glew
+brew install sdl2 sdl2_mixer glew
 ```
 
 **Linux: missing shared libraries.** On Debian/Ubuntu:
 
 ```bash
 sudo apt-get install libsdl2-2.0-0 libsdl2-image-2.0-0 libsdl2-mixer-2.0-0 \
-    libfreeimage3 libglew2.2 libglu1-mesa
+    libglew2.2 libglu1-mesa
 ```
 
 **Login hangs, or you are dropped immediately after the login packet.**

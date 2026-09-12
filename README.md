@@ -33,22 +33,18 @@ git clone https://github.com/yonicohen/OrionUO.git
 cd OrionUO
 ```
 
-The port is merged into `master`; the `macos-port` branch is kept for history.
+The port is merged into `master`.
 
 ---
 
 ## Building
-
-Pick your platform. macOS is the one this fork was made for and is the most
-exercised; Windows and Linux build from the same source and are covered by CI,
-but have had far less use.
 
 ### macOS
 
 Homebrew, plus:
 
 ```bash
-brew install cmake ninja sdl2 sdl2_image sdl2_mixer freeimage glew
+brew install cmake ninja sdl2 sdl2_mixer glew
 ```
 
 ```bash
@@ -315,9 +311,9 @@ Patreon: https://www.patreon.com/hotride
 ## Licensing
 
 OrionUO is MIT licensed (see `LICENSE`) — a modified binary may be redistributed
-provided the copyright notice is kept. SDL2, GLEW and zlib are permissive.
-**FreeImage is dual-licensed FIPL/GPL and its terms should be read before
-publishing binaries.**
+provided the copyright notice is kept. SDL2, GLEW, zlib and the vendored
+`third_party/stb_image_write.h` (MIT / public domain) are all permissive, so a
+built binary carries no copyleft obligation.
 
 **Do not redistribute UO data files.** They are EA/Broadsword copyrighted
 content. A bare executable is fine; a bundle containing game data is not.

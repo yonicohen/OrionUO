@@ -27,7 +27,6 @@ addons:
       - libsdl2-dev
       - libsdl2-image-dev
       - libsdl2-mixer-dev
-      - libfreeimage-dev
       - libglew-dev
 script:
     - export CC=${CC_COMPILER}
