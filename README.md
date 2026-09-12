@@ -17,8 +17,12 @@ binary, which matters for one protocol handshake (see [Known gaps](#known-gaps))
 Verified working against a live Sphere 0.56b shard: login, character creation,
 world rendering, movement, sound, text input, vendors and gump interaction.
 
-> **Just want to play?** [INSTRUCTIONS.md](INSTRUCTIONS.md) is a step-by-step
-> setup guide for the Ignis UO shard, including troubleshooting and controls.
+> **Just want to play?** Don't build anything. Grab the archive for your
+> platform from the [releases page](https://github.com/yonicohen/OrionUO/releases)
+> and run `./setup.sh` (`setup.cmd` on Windows): it asks where your Ultima
+> Online folder is and then starts the client on Ignis UO.
+> [INSTRUCTIONS.md](INSTRUCTIONS.md) has the details, troubleshooting and
+> controls.
 
 ---
 
@@ -77,8 +81,19 @@ the runtime files:
 ## Running
 
 You need a real Ultima Online installation. **No UO data files ship with this
-repository**, and they cannot be redistributed. The client reads the `.mul` /
-`.uop` files from an existing install.
+repository or with any release**, and they cannot be redistributed - they are
+EA/Broadsword copyright. The client reads the `.mul` / `.uop` files from an
+install you already have: your shard's download, or the free Classic Client
+from <https://uo.com/client-download/>.
+
+The release archives do this for you. `packaging/setup.sh` (shipped in each
+archive as `setup.sh`) symlinks the data into a `data/` directory beside the
+binary, writes `uo_debug.cfg`, generates a `Client.cuo` if the install has none,
+and launches the client. Nothing is written into your UO folder. The shard it
+connects to lives in `packaging/shard.conf`, and `packaging/play-ignis.sh`
+turns that into the client's `-login` argument.
+
+What follows is the manual equivalent, for a build tree.
 
 ### 1. Point it at your UO data
 
@@ -119,6 +134,11 @@ cd build/OrionUO
 | `-account <hex>,<hex>` | Account and password, hex-encoded bytes. |
 | `-autologin 1` | Auto-select server and character. |
 | `-fastlogin` | Actually initiate the auto-login. `-autologin` alone only ticks the box. |
+
+Each option must arrive as a **single** argument, quotes included:
+`ParseCommandLine` tokenises every argument on spaces, commas and colons, so an
+unquoted `-login host,port` reaches the client as two arguments and is dropped
+without a word.
 
 `tools/version-sweep.sh` uses these to test candidate Orion versions unattended.
 

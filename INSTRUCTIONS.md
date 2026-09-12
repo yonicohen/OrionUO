@@ -1,68 +1,84 @@
-# Playing on Ignis UO from a Mac
+# Playing on Ignis UO
 
-Step-by-step setup for [Ignis UO](https://uo.jmaul.co.uk) (formerly JIMUO) using
-this client. The shard permits only the Orion client, so a stock macOS UO client
-will not work — this is why the port exists.
+Setup for [Ignis UO](https://uo.jmaul.co.uk) (formerly JIMUO) using this client.
+The shard permits only the Orion client, so a stock macOS UO client will not
+work — this is why the port exists.
 
-**You need:** a Mac (Apple Silicon or Intel), [Homebrew](https://brew.sh), and
-about 4 GB of free disk.
-
----
-
-## 1. Get the shard's client package
-
-Download `JimUO_May2025.zip` (1.4 GB) from the link on the shard's
-[Getting Started](https://uo.jmaul.co.uk/index.php?title=Getting_Started) page
-and unzip it.
-
-You want the **`Ultima Online`** folder inside — that is the game data. The
-`Orion Launcher` folder is Windows-only and is not needed.
-
-> UO data files cannot be redistributed, which is why they are not in this
-> repository. You must get them from the shard.
-
-## 2. Install dependencies
-
-```bash
-brew install cmake ninja sdl2 sdl2_image sdl2_mixer freeimage glew
-```
-
-## 3. Build the client
-
-```bash
-git clone https://github.com/yonicohen/OrionUO.git
-cd OrionUO
-cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
-ninja -C build OrionUO
-```
-
-## 4. Point it at the game data
-
-```bash
-cd build/OrionUO
-echo "CustomPath=/full/path/to/Ultima Online" > uo_debug.cfg
-```
-
-Use the real path to the folder you unzipped. No quotes are needed in the file
-even though the path contains a space.
-
-## 5. Run it
-
-```bash
-./OrionUO "-login uo.jmaul.co.uk,2593" "-orionversion 1.0.35.1"
-```
-
-The `cd` in step 4 matters — the client reads `uo_debug.cfg` from its working
-directory. `Client.cuo`, however, is loaded from the **UO data folder** named by
-`CustomPath`, not from the working directory; a copy next to the binary is
-ignored.
-
-Alternatively, `./tools/setup-macos.sh "/full/path/to/Ultima Online"` does steps
-2 through 4 in one go.
+**You need:** a Mac, Linux box or Windows PC, and an Ultima Online installation
+you already have. The shard address is baked into the package; there is nothing
+to configure.
 
 ---
 
-## 6. First time in the client
+## Quick start
+
+Download the archive for your platform from the
+[releases page](https://github.com/yonicohen/OrionUO/releases) and run the setup
+script. It asks where your Ultima Online folder is, wires everything up, and
+starts the game.
+
+**macOS**
+
+```bash
+mkdir orionuo && tar -xzf orionuo-macos-arm64.tar.gz -C orionuo
+cd orionuo && ./setup.sh
+```
+
+macOS will refuse to open the binary the first time because it is not notarised.
+Either right-click `OrionUO` → *Open* once, or run:
+
+```bash
+xattr -dr com.apple.quarantine .
+```
+
+**Linux**
+
+```bash
+mkdir orionuo && tar -xzf orionuo-linux-x86_64.tar.gz -C orionuo
+cd orionuo && ./setup.sh
+```
+
+**Windows**
+
+Unpack the archive and double-click **`setup.cmd`**.
+
+Afterwards, start the game with `./play-ignis.sh` (macOS and Linux) or
+`play-ignis.cmd` (Windows). Setup only has to be run once.
+
+You can skip the prompt by passing the path:
+
+```bash
+./setup.sh "/path/to/Ultima Online"
+```
+
+---
+
+## Where the UO data comes from
+
+**This package contains no UO data and none is ever published with it.** The
+art, maps, sounds and animations are EA/Broadsword copyright and cannot be
+redistributed. `setup.sh` takes them from an installation on your own machine:
+
+* **Your shard's package.** Ignis UO links `JimUO_May2025.zip` (1.4 GB) from its
+  [Getting Started](https://uo.jmaul.co.uk/index.php?title=Getting_Started)
+  page. Unzip it and point setup at the **`Ultima Online`** folder inside. This
+  is the easiest route: it already contains a `Client.cuo`.
+* **The free Classic Client** from <https://uo.com/client-download/>. Install it
+  (the installer is Windows-only, and the data is fetched by its patcher on
+  first run), then point setup at the resulting folder.
+
+Setup does not copy the data. On macOS and Linux it creates a `data/` directory
+of symlinks — a few kilobytes, not 2.6 GB — and on Windows it uses hard links
+and junctions, falling back to copying if the package and your install are on
+different drives. **Nothing in your UO folder is written to or modified.**
+
+Some of the install is never read and is left out: `Models/`,
+`Orion Launcher/`, the `.bik` intro videos, and the Windows `.exe`/`.dll` files.
+`Music/` is included but only matters if you want in-game music.
+
+---
+
+## First time in the client
 
 1. **Choose `Ignis UO` on the server list — not `DO NOT USE`.** The shard
    advertises two servers and the dead one is listed first. The client
@@ -74,7 +90,42 @@ Alternatively, `./tools/setup-macos.sh "/full/path/to/Ultima Online"` does steps
 
 ---
 
+## Pointing the package at another shard
+
+`shard.conf` in the package is the whole configuration:
+
+```
+SHARD_NAME=Ignis UO
+SHARD_HOST=uo.jmaul.co.uk
+SHARD_PORT=2593
+ORION_VERSION=
+```
+
+The launcher turns that into `-login uo.jmaul.co.uk,2593` on the client's
+command line. Edit the file to play elsewhere; nothing else needs changing.
+
+---
+
 ## Troubleshooting
+
+**macOS: "OrionUO cannot be opened because the developer cannot be verified".**
+The build is not notarised. Run `xattr -dr com.apple.quarantine .` in the
+package directory, or right-click the binary and choose *Open* once.
+
+**macOS: missing Homebrew libraries.**
+`setup.sh` checks the ones the binary actually links and prints the exact
+command. It is normally:
+
+```bash
+brew install sdl2 sdl2_image sdl2_mixer freeimage glew
+```
+
+**Linux: missing shared libraries.** On Debian/Ubuntu:
+
+```bash
+sudo apt-get install libsdl2-2.0-0 libsdl2-image-2.0-0 libsdl2-mixer-2.0-0 \
+    libfreeimage3 libglew2.2 libglu1-mesa
+```
 
 **Login hangs, or you are dropped immediately after the login packet.**
 The server still has your previous session open. Wait 30–60 seconds before
@@ -82,10 +133,11 @@ retrying; reconnecting inside that window keeps re-triggering the refusal.
 
 **Kicked about 6 seconds after entering the world**, with
 *"This server requires the latest ORION version"*.
-The shard checks the reported Orion version. Bump it — no rebuild required:
+The shard checks the reported Orion version. Bump it in `shard.conf` — no
+rebuild required:
 
-```bash
-./OrionUO "-login uo.jmaul.co.uk,2593" "-orionversion 1.0.37.0"
+```
+ORION_VERSION=1.0.38.0
 ```
 
 Current releases are listed at
@@ -96,24 +148,24 @@ Expected and harmless. The Orion Assistant is a Windows DLL and cannot load
 natively, so scripting and macros are unavailable. Everything else works.
 
 **`Client.cuo is missing!`**
-It normally ships in the shard's package and is found automatically. If you need
-to generate one, write it into the **UO data folder** — that is the only place
-the client looks:
+`Client.cuo` names the UO version and login encryption, and is normally written
+by the Windows-only Orion Launcher. If your install has one, setup links it. If
+not, setup generates one for 7.0.20.0 with `make_client_cuo.py`, which needs
+Python 3. Never overwrite a `Client.cuo` your shard shipped — that copy carries
+login crypt keys a generated file zeroes out.
+
+To generate one by hand:
 
 ```bash
-python3 tools/make_client_cuo.py -o "/full/path/to/Ultima Online/Client.cuo" \
+python3 make_client_cuo.py -o data/Client.cuo \
     --client-version CV_70180 --encryption ET_TFISH --version-text 7.0.20.0
 ```
-
-Match the shard's own file if you have it: Ignis UO ships format 5 with
-`ET_TFISH`, `CV_70180` and version text `7.0.20.0`. Do not overwrite a working
-`Client.cuo` with a generated one — the shard's copy carries login crypt keys
-that a generated file zeroes out.
 
 **Stuck on "Verifying account", or "There is some problem communicating with
 Origin".**
 That dialog is packet `0x82` (Login Denied); the client discards the reason byte
-that says why. Ask the server directly:
+that says why. Ask the server directly with `tools/login-probe.py` from the
+source tree:
 
 ```bash
 ./tools/login-probe.py uo.jmaul.co.uk 2593
@@ -131,8 +183,12 @@ will fix it. Compare the two before assuming the client is at fault:
 ```
 
 **No sound.**
-MIDI music needs `uo_4mb_2.sf2`, which the build copies automatically. MP3 music
-and sound effects need nothing extra.
+MIDI music needs `uo_4mb_2.sf2`, which ships in the package. MP3 music and sound
+effects need nothing extra.
+
+**Starting over.** Delete `data/` and `uo_debug.cfg` from the package and run
+`./setup.sh` again. Your UO installation is never touched, so there is nothing
+to repair there.
 
 ---
 
@@ -147,6 +203,42 @@ and sound effects need nothing extra.
 | Resurrect | As a ghost, **toggle war mode** to manifest, then approach a healer |
 | Use a skill | Paperdoll → skills scroll → blue button beside the skill |
 | Buy | Say `buy` to a vendor, or double-click them; stand adjacent |
+
+---
+
+## Building it yourself
+
+Only needed if you want to change the client; the release archives above are
+prebuilt.
+
+```bash
+brew install cmake ninja sdl2 sdl2_image sdl2_mixer freeimage glew
+git clone https://github.com/yonicohen/OrionUO.git
+cd OrionUO
+cmake -G Ninja -S . -B build -DCMAKE_BUILD_TYPE=Release
+ninja -C build OrionUO
+```
+
+The binary lands at `build/OrionUO/OrionUO`. To run it against your UO data
+without assembling a package, point it at the data directly:
+
+```bash
+cd build/OrionUO
+echo "CustomPath=/full/path/to/Ultima Online" > uo_debug.cfg
+./OrionUO "-login uo.jmaul.co.uk,2593"
+```
+
+The `cd` matters — the client reads `uo_debug.cfg` from its working directory,
+not from beside the binary. Note that running this way lets the client write its
+settings (`orion_options.cfg`, `macros_debug.cuo`) into your UO folder; the
+packaged `setup.sh` exists partly to avoid that.
+
+`-login host,port` must be a single argument, quotes included: the client
+tokenises each argument on spaces, commas and colons, so an unquoted
+`-login host,port` arrives as two arguments and is ignored.
+
+Alternatively, `./tools/setup-macos.sh "/full/path/to/Ultima Online"` installs
+the dependencies, builds, and wires up the runtime files in one go.
 
 ---
 
