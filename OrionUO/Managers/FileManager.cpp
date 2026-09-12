@@ -11,6 +11,9 @@
 //----------------------------------------------------------------------------------
 #include "stdafx.h"
 #include "FileSystem.h"
+// The UOP read is timed with SDL_GetTicks. Every other platform gets SDL_timer.h
+// by way of stdafx.h; the Windows build does not, and failed to compile.
+#include <SDL_timer.h>
 CFileManager g_FileManager;
 //----------------------------------------------------------------------------------
 CUopMappedFile::CUopMappedFile()

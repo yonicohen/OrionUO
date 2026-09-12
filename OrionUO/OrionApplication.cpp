@@ -19,16 +19,18 @@ void COrionApplication::OnMainLoop()
     //WISPFUN_DEBUG("c193_f1");
     g_Ticks = SDL_GetTicks();
 
-    // A finger resting on the screen produces no events, so the press-and-hold
-    // that stands in for the right button has to be noticed here.
+#if !USE_WISP
+    // A finger resting on the screen produces no events, so the stick and the
+    // stale-press watchdog have to be looked at here. The Wisp build is Windows
+    // with a mouse and has neither.
     g_OrionWindow.ProcessTouch();
 
-    // The soft keyboard is only wanted while a text field has focus; anywhere
-    // else it covers the bottom half of the screen for nothing.
-    // Not the game console: in the world it holds focus permanently, so
-    // following it would keep the keyboard over the game for the whole session.
-    // A two-finger tap raises it there instead.
+    // The soft keyboard is only wanted while a text field has focus, and not the
+    // game console: in the world that holds focus permanently, so following it
+    // would keep the keyboard over the game for the whole session. A two-finger
+    // tap raises it there instead.
     g_OrionWindow.UpdateTextInput(g_EntryPointer != nullptr && g_EntryPointer != &g_GameConsole);
+#endif
 
     // The keyboard sliding in or out changes how much of the window the
     // pre-game screens have to fit into, and produces no resize event to hang
