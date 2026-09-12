@@ -1618,7 +1618,7 @@ void CGameScreen::DrawTouchStick()
     // button the paperdoll uses for it.
     // Nearly invisible until a thumb is on it: it sits over the world, and the
     // world is the thing worth looking at.
-    const float ringAlpha = g_TouchStick.Active ? 0.95f : 0.22f;
+    const float ringAlpha = g_TouchStick.Active ? 0.95f : 0.45f;
 
     // CGLTexture's width/height draw TILES the art rather than scaling it, so
     // anything resized here is drawn at its natural size under a scale on the

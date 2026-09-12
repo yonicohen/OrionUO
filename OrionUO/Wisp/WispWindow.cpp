@@ -1134,10 +1134,29 @@ void CWindow::ProcessTouch()
     // held. SDL can lose a FINGERUP - a lift that leaves the window, a gesture
     // the system swallows - and the press then never ends: a dragged paperdoll
     // stayed stuck to the cursor and jumped to wherever was touched next.
-    if (SDL_GetNumTouchFingers(SDL_GetTouchDevice(0)) == 0 &&
-        (g_Touch.Active || g_Touch.LeftDown || g_Touch.RightDown || g_Stick.Active ||
-         g_TouchStick.ButtonHeld))
+    //
+    // Every touch device has to be counted, not just the first: asking only
+    // SDL_GetTouchDevice(0) read zero fingers while a finger was plainly down on
+    // another one, and the watchdog then cut every drag short. It also has to
+    // stay quiet for a moment first, so it cannot race the events it is there to
+    // back up.
+    int fingers = 0;
+    for (int device = 0; device < SDL_GetNumTouchDevices(); device++)
+        fingers += SDL_GetNumTouchFingers(SDL_GetTouchDevice(device));
+
+    const bool holding = (g_Touch.Active || g_Touch.LeftDown || g_Touch.RightDown ||
+                          g_Stick.Active || g_TouchStick.ButtonHeld);
+
+    static uint emptySince = 0;
+    if (fingers > 0 || !holding)
+        emptySince = 0;
+    else if (emptySince == 0)
+        emptySince = SDL_GetTicks();
+
+    if (holding && fingers == 0 && emptySince != 0 && SDL_GetTicks() - emptySince >= 250)
     {
+        emptySince = 0;
+
         if (g_Touch.LeftDown)
             TouchMouseEvent(SDL_MOUSEBUTTONUP, SDL_BUTTON_LEFT, g_Touch.Current);
 
