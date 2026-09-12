@@ -439,6 +439,20 @@ void CGumpStatusbar::PrepareContent()
     }
 }
 //----------------------------------------------------------------------------------
+// The window only moves when the press landed on nothing, and a status bar is
+// elements from edge to edge - so it could not be dragged at all, while the
+// paperdoll, which has inert space around its art, could. MoveOnDrag is the flag
+// meant for exactly this, and until now nothing ever set it: it makes the
+// background behave as the window's drag handle, leaving the stat icons and
+// buttons on it to do their own jobs.
+static CBaseQueueItem *MakeDragHandle(CBaseQueueItem *item)
+{
+    if (item != NULL)
+        ((CBaseGUI *)item)->MoveOnDrag = true;
+
+    return item;
+}
+//----------------------------------------------------------------------------------
 void CGumpStatusbar::UpdateContent()
 {
     WISPFUN_DEBUG("c128_f12");
@@ -458,13 +472,13 @@ void CGumpStatusbar::UpdateContent()
 
             if (g_PacketManager.GetClientVersion() >= CV_308D &&
                 !g_ConfigManager.GetOldStyleStatusbar())
-                Add(new CGUIGumppic(0x2A6C, 0, 0));
+                MakeDragHandle(Add(new CGUIGumppic(0x2A6C, 0, 0)));
             else
             {
                 p.x = 244;
                 p.y = 112;
 
-                Add(new CGUIGumppic(0x0802, 0, 0));
+                MakeDragHandle(Add(new CGUIGumppic(0x0802, 0, 0)));
             }
             int xOffset = 0;
             //Отрисовка набора характеристик, расположение в зависимости от версии протокола, комментировать не буду...
@@ -841,6 +855,7 @@ void CGumpStatusbar::UpdateContent()
             if (g_Party.Leader != 0 && !g_ConfigManager.GetOriginalPartyStatusbar()) //inParty
             {
                 CGUIGumppic *bodyGump = (CGUIGumppic *)Add(new CGUIGumppic(0x0803, 0, 0));
+                bodyGump->MoveOnDrag = true;
                 bodyGump->SelectOnly = true;
 
                 text = (CGUIText *)Add(new CGUIText(0x0386, 16, -2));
@@ -896,9 +911,10 @@ void CGumpStatusbar::UpdateContent()
             else
             {
                 if (g_Player->Warmode)
-                    Add(new CGUIGumppic(0x0807, 0, 0)); //Версия с включенным вармодом
+                    MakeDragHandle(
+                        Add(new CGUIGumppic(0x0807, 0, 0))); //Версия с включенным вармодом
                 else
-                    Add(new CGUIGumppic(0x0803, 0, 0)); //Гамп статусбара
+                    MakeDragHandle(Add(new CGUIGumppic(0x0803, 0, 0))); //Гамп статусбара
 
                 //Hits
                 Add(new CGUIGumppic(0x0805, 34, 12));

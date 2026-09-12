@@ -1193,6 +1193,20 @@ bool CWindow::OnWindowProc(SDL_Event &ev)
             break;
         }
 
+#if defined(__ANDROID__)
+        case SDL_APP_WILLENTERBACKGROUND:
+        case SDL_APP_TERMINATING:
+        {
+            // A desktop client saves when it is closed. An Android one is rarely
+            // closed - it is swiped away or killed - so nothing was ever written
+            // and gump positions, macros and options were lost every time. This
+            // is the platform's real shutdown, and SDL delivers it while there
+            // is still time to write.
+            g_Orion.SaveLocalConfig(g_PacketManager.ConfigSerial);
+        }
+        break;
+#endif
+
         // SDL_WINDOWEVENT_* are subtypes carried in ev.window.event, not event
         // types. They used to be matched against ev.type directly, so none of
         // them ever fired: show/hide never reached the plugin or the sound and
