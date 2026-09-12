@@ -18,141 +18,20 @@ CColorizerShader g_LightColorizerShader;
 //----------------------------------------------------------------------------------
 #ifdef ORION_GLES
 //----------------------------------------------------------------------------------
-// GLES 1.x has no programmable pipeline, and this path is written against the
-// ARB extension entry points, which GLES does not provide under any name or
-// version. The shaders are stubbed out rather than faked: every caller already
-// copes with Init() failing - Use() returns false and drawing falls back to the
-// fixed function pipeline - so the client renders without hue colorisation
-// instead of not rendering at all.
+// The client's own shaders - hue colourisation, the death greyscale, lighting -
+// are written against the fixed function pipeline: they read gl_TexCoord and
+// gl_Color and are bound over whatever the renderer is already doing. GLES 2.0
+// has neither, so on this platform they are programs sharing the batch's vertex
+// shader and its attribute layout, swapped in place of the default one.
 //
-// Hues are not cosmetic in UO, so this is a stopgap. Restoring them means a
-// GLES 2.0 renderer, which also has to replace the fixed function matrix stack
-// and the client-side vertex arrays this code still relies on. See docs/ANDROID.md.
+// Until they are, they are inert: Init() fails, Use() returns false, and the
+// batch draws with its own program.
 //----------------------------------------------------------------------------------
-// GLES 1.1 has no shaders, but it does have the texture combiners, and the one
-// effect the client cannot do without is the greyscale it draws the world in
-// while the player is dead. It is built here out of two texture stages.
-//
-// DOT3_RGB computes 4*((A-0.5).(B-0.5)), which is a dot product biased around
-// a half. Feeding it the texture directly gives luminance minus a half, and the
-// bottom half of that clamps to black. So the first stage rescales the texel
-// into [0.5, 1] (0.5*T + 0.5, which is INTERPOLATE against white with a factor
-// of a half) and the second dots that against a constant carrying the same bias
-// - the two halves cancel and what comes out is the luminance itself.
-//
-// Alpha is left alone throughout: it still comes from the texture modulated by
-// the vertex colour, so the alpha test that masks UO art keeps working.
-static const float GrayLuminance[3] = { 0.299f, 0.587f, 0.114f };
-static GLuint g_GrayDummyTexture = 0;
-static bool g_GrayscaleActive = false;
-
-bool GLGrayscaleActive()
-{
-    return g_GrayscaleActive;
-}
-
-static void EndGrayscale()
-{
-    if (!g_GrayscaleActive)
-        return;
-
-    g_GrayscaleActive = false;
-
-    glActiveTexture(GL_TEXTURE1);
-    glDisable(GL_TEXTURE_2D);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    glActiveTexture(GL_TEXTURE0);
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-
-    // The bound texture is tracked by GLEngine, and unit 0 was never rebound,
-    // so nothing has to be restored here beyond the environment itself.
-}
-
-static bool BeginGrayscale()
-{
-    if (g_GrayscaleActive)
-        return true;
-
-    GLint units = 0;
-    glGetIntegerv(GL_MAX_TEXTURE_UNITS, &units);
-
-    if (units < 2)
-        return false;
-
-    if (g_GrayDummyTexture == 0)
-    {
-        // Unit 1 reads neither this texture nor any texture coordinate - its
-        // combiner sources are PREVIOUS and CONSTANT - but the unit still has to
-        // have a complete texture bound to be enabled at all.
-        const uchar white[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
-
-        glGenTextures(1, &g_GrayDummyTexture);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, g_GrayDummyTexture);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, white);
-        glActiveTexture(GL_TEXTURE0);
-    }
-
-    // Stage 0: colour becomes 0.5*texel + 0.5, alpha stays texel * vertex.
-    const float halfWhite[4] = { 1.0f, 1.0f, 1.0f, 0.5f };
-
-    glActiveTexture(GL_TEXTURE0);
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
-    glTexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, halfWhite);
-    glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_INTERPOLATE);
-    glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_RGB, GL_TEXTURE);
-    glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
-    glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_RGB, GL_CONSTANT);
-    glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
-    glTexEnvi(GL_TEXTURE_ENV, GL_SRC2_RGB, GL_CONSTANT);
-    glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND2_RGB, GL_SRC_ALPHA);
-    glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_MODULATE);
-    glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_ALPHA, GL_TEXTURE);
-    glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
-    glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_ALPHA, GL_PRIMARY_COLOR);
-    glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_ALPHA, GL_SRC_ALPHA);
-    glTexEnvf(GL_TEXTURE_ENV, GL_RGB_SCALE, 1.0f);
-    glTexEnvf(GL_TEXTURE_ENV, GL_ALPHA_SCALE, 1.0f);
-
-    // Stage 1: dot the rescaled colour against the weights, carry alpha through.
-    // DOT3 is undefined with a scale other than one, so it is left at one.
-    const float weights[4] = { 0.5f + GrayLuminance[0] * 0.5f,
-                               0.5f + GrayLuminance[1] * 0.5f,
-                               0.5f + GrayLuminance[2] * 0.5f,
-                               1.0f };
-
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, g_GrayDummyTexture);
-    glEnable(GL_TEXTURE_2D);
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
-    glTexEnvfv(GL_TEXTURE_ENV, GL_TEXTURE_ENV_COLOR, weights);
-    glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_DOT3_RGB);
-    glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_RGB, GL_PREVIOUS);
-    glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_RGB, GL_SRC_COLOR);
-    glTexEnvi(GL_TEXTURE_ENV, GL_SRC1_RGB, GL_CONSTANT);
-    glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND1_RGB, GL_SRC_COLOR);
-    glTexEnvi(GL_TEXTURE_ENV, GL_COMBINE_ALPHA, GL_REPLACE);
-    glTexEnvi(GL_TEXTURE_ENV, GL_SRC0_ALPHA, GL_PREVIOUS);
-    glTexEnvi(GL_TEXTURE_ENV, GL_OPERAND0_ALPHA, GL_SRC_ALPHA);
-    glTexEnvf(GL_TEXTURE_ENV, GL_RGB_SCALE, 1.0f);
-    glTexEnvf(GL_TEXTURE_ENV, GL_ALPHA_SCALE, 1.0f);
-
-    glActiveTexture(GL_TEXTURE0);
-
-    g_GrayscaleActive = true;
-    return true;
-}
-
 void UnuseShader()
 {
-    EndGrayscale();
     ShaderColorTable = 0;
     g_ShaderDrawMode = 0;
+    g_ClientShaderActive = false;
 }
 //----------------------------------------------------------------------------------
 CGLShader::CGLShader()
@@ -194,9 +73,8 @@ bool CDeathShader::Init(const char * /*vertexShaderData*/, const char * /*fragme
 //----------------------------------------------------------------------------------
 bool CDeathShader::Use()
 {
-    ShaderColorTable = 0;
-    g_ShaderDrawMode = 0;
-    return BeginGrayscale();
+    UnuseShader();
+    return false;
 }
 //----------------------------------------------------------------------------------
 CColorizerShader::CColorizerShader()

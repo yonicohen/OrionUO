@@ -32,7 +32,7 @@ extern bool g_Asmut;
 #include "GLEngine/GLFrameBuffer.h"
 #include "GLEngine/GLTexture.h"
 #if defined(ORION_GLES)
-#include <GLES/gl.h>
+#include <GLES2/gl2.h>
 #elif defined(ORION_OSX)
 #include <OpenGL/gl.h>
 #include <OpenGL/glu.h>

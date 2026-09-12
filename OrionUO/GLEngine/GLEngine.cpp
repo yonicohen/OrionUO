@@ -195,12 +195,15 @@ bool CGLEngine::Install()
         g_OrionWindow.ShowMessage("Your graphics card does not support Frame Buffers!", "Warning!");
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f); // Black Background
-    glShadeModel(GL_SMOOTH);              // Enables Smooth Color Shading
     glClearDepth(1.0);                    // Depth Buffer Setup
     glDisable(GL_DITHER);
 
+#if !defined(ORION_GLES)
+    glShadeModel(GL_SMOOTH); // Enables Smooth Color Shading
+
     //glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);   //Realy Nice perspective calculations
     glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
+#endif
 
     glEnable(GL_TEXTURE_2D);
 
@@ -233,12 +236,19 @@ bool CGLEngine::Install()
         SDL_GL_GetSwapInterval());
 #endif
 
+#if !defined(ORION_GLES)
     glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
     glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+#endif
 
     glClearStencil(0);
     glStencilMask(1);
 
+#if !defined(ORION_GLES)
+    // The fixed function light the land tiles are shaded by. CGLVertexBatchShader
+    // reads this state back once and reproduces it in its vertex shader; under
+    // GLES there is no such state to read, so the same numbers are given to it
+    // directly - see CacheLightingState.
     glEnable(GL_LIGHT0);
 
     GLfloat lightPosition[] = { -1.0f, -1.0f, 0.5f, 0.0f };
@@ -252,6 +262,7 @@ bool CGLEngine::Install()
     glLightModelfv(GL_LIGHT_MODEL_AMBIENT, &lightAmbientValues[0]);
 
     glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_FALSE);
+#endif
 
     // Build the shader pipeline that CGLVertexBatch can draw through. It is the
     // path a Core profile or GLES 2.0 will require; drawing through it now, in a
@@ -443,10 +454,9 @@ void CGLEngine::GL1_BindTexture16(CGLTexture &texture, int width, int height, pu
     // for it: art is uploaded lazily, so walking into new ground broke the chain
     // partway through a frame and everything darker than mid grey came out
     // black.
-#if defined(ORION_GLES)
-    if (!GLGrayscaleActive())
+#if !defined(ORION_GLES)
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 #endif
-        glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
     // Linear magnification: the pre-game screens are 640x480 artwork scaled up
     // to fill the window, and GL_NEAREST makes that visibly blocky. At 1:1, which
@@ -549,10 +559,9 @@ void CGLEngine::GL1_BindTexture32(CGLTexture &texture, int width, int height, pu
     // for it: art is uploaded lazily, so walking into new ground broke the chain
     // partway through a frame and everything darker than mid grey came out
     // black.
-#if defined(ORION_GLES)
-    if (!GLGrayscaleActive())
+#if !defined(ORION_GLES)
+    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 #endif
-        glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -688,11 +697,17 @@ void CGLEngine::BeginDraw()
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 #endif
 
+    // Nothing outside the batch shader knows what it left bound, and SDL may
+    // have changed the context under us between frames.
+    g_GLBatchShader.InvalidateState();
+
+#if !defined(ORION_GLES)
     if (CanUseBuffer)
     {
         glEnableClientState(GL_VERTEX_ARRAY);
         glEnableClientState(GL_TEXTURE_COORD_ARRAY);
     }
+#endif
 }
 //----------------------------------------------------------------------------------
 void CGLEngine::EndDraw()
@@ -700,11 +715,13 @@ void CGLEngine::EndDraw()
     WISPFUN_DEBUG("c29_f12");
     Drawing = false;
 
+#if !defined(ORION_GLES)
     if (CanUseBuffer)
     {
         glDisableClientState(GL_VERTEX_ARRAY);
         glDisableClientState(GL_TEXTURE_COORD_ARRAY);
     }
+#endif
 
     glDisable(GL_ALPHA_TEST);
 

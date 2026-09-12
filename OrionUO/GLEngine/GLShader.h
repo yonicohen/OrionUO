@@ -92,12 +92,6 @@ public:
     virtual bool Use();
 };
 //----------------------------------------------------------------------------------
-#if defined(ORION_GLES)
-// True while the death greyscale owns the texture environment - see GLShader.cpp.
-// Nothing else may set GL_TEXTURE_ENV_MODE while it does.
-bool GLGrayscaleActive();
-#endif
-//----------------------------------------------------------------------------------
 extern CDeathShader g_DeathShader;
 extern CColorizerShader g_ColorizerShader;
 extern CColorizerShader g_FontColorizerShader;

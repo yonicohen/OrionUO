@@ -32,24 +32,8 @@
 // one. Nothing is submitted to GL at double precision, so this is only a type.
 typedef double GLdouble;
 
-// Framebuffers exist in GLES 1.x only under GL_OES_framebuffer_object, with
-// every name suffixed. Availability is checked at runtime in CGLEngine::Install
-// via the extension string, exactly as the desktop build checks GLEW.
-#define glGenFramebuffers glGenFramebuffersOES
-#define glBindFramebuffer glBindFramebufferOES
-#define glDeleteFramebuffers glDeleteFramebuffersOES
-#define glFramebufferTexture2D glFramebufferTexture2DOES
-#define glCheckFramebufferStatus glCheckFramebufferStatusOES
-#define GL_FRAMEBUFFER GL_FRAMEBUFFER_OES
-#define GL_FRAMEBUFFER_BINDING GL_FRAMEBUFFER_BINDING_OES
-#define GL_FRAMEBUFFER_COMPLETE GL_FRAMEBUFFER_COMPLETE_OES
-#define GL_COLOR_ATTACHMENT0 GL_COLOR_ATTACHMENT0_OES
-#define glGenerateMipmap glGenerateMipmapOES
-
-// Blend equations are GL_OES_blend_subtract in GLES 1.x, again all suffixed.
-#define glBlendEquation glBlendEquationOES
-#define GL_FUNC_ADD GL_FUNC_ADD_OES
-#define GL_FUNC_REVERSE_SUBTRACT GL_FUNC_REVERSE_SUBTRACT_OES
+// Framebuffers, blend equations and mipmap generation are all core in GLES 2.0,
+// so nothing here has to be aliased onto an extension the way the 1.x port did.
 
 // GLES has no sized internal formats and no BGRA. The framebuffer's colour
 // texture is allocated with a null pixel pointer, so only the enums matter.
@@ -77,52 +61,87 @@ inline void glDeleteLists(GLuint /*list*/, GLsizei /*range*/)
 {
 }
 
-// The shader classes are stubbed out under GLES (see GLShader.cpp), but the
-// uniform calls are scattered through the GUI drawing code. These make them
-// inert rather than #ifdef'ing every call site; with no program bound there is
-// no uniform to set.
-inline void glUniform1iARB(GLint /*location*/, GLint /*v0*/)
+// The ARB spellings the desktop build uses for shader objects. GLES 2.0 has the
+// same calls under their core names, so these are aliases rather than stubs.
+#define glUniform1iARB glUniform1i
+#define glUniform1fvARB glUniform1fv
+#define glUseProgramObjectARB glUseProgram
+
+// Fixed function state that GLES 2.0 removed outright. The renderer draws
+// through a shader and a software matrix stack, so nothing is lost by making
+// these inert - but the call sites are spread through drawing code shared with
+// the desktop build, and an #ifdef at each one would be worse than this.
+#define GL_ALPHA_TEST 0x0BC0
+#define GL_TEXTURE_2D_ENABLE_STANDIN 0x0DE1
+
+inline void glAlphaFunc(GLenum /*func*/, GLclampf /*ref*/)
 {
 }
-inline void glUniform1fv(GLint /*location*/, GLsizei /*count*/, const GLfloat * /*value*/)
+inline void glLightModeli(GLenum /*pname*/, GLint /*param*/)
 {
 }
-
-// Blending stands in for the alpha test here - see CGLEngine::Install - so it
-// has to stay on. Draws that set their own blend function still work; this only
-// stops them switching the mask off when they are finished, and puts the
-// standard function back instead.
-inline void OrionGLDisable(GLenum cap)
-{
-    if (cap == GL_BLEND)
-    {
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        return;
-    }
-
-    glDisable(cap);
-}
-#define glDisable OrionGLDisable
-
-inline void glLightModeli(GLenum pname, GLint param)
-{
-    glLightModelf(pname, (GLfloat)param);
-}
-
-// GLES has only the float spellings of the matrix and depth entry points, and
-// no GLdouble type at all - hence plain double in these signatures.
 inline void glClearDepth(double depth)
 {
     glClearDepthf((GLclampf)depth);
 }
-// GLES has only the float spellings of the matrix and clipping entry points.
-inline void glOrtho(
-    double left, double right, double bottom, double top, double zNear, double zFar)
+
+// GL_TEXTURE_2D is a texture target in GLES 2.0, not a capability: enabling and
+// disabling it is meaningless, and the driver rejects it. Whether a draw is
+// textured is a uniform on the shader instead - see CGLVertexBatch - and these
+// keep that decision in one place.
+void OrionGLSetTextured(bool textured);
+bool OrionGLTextured();
+
+// GL_LIGHTING is fixed function state the land tile path switches on around its
+// draw, and which the batch reads back to decide whether to shade. GLES 2.0 has
+// neither, so the flag is kept here and read by CGLVertexBatch instead.
+#define GL_LIGHTING 0x0B50
+
+void OrionGLSetLighting(bool lighting);
+bool OrionGLLightingEnabled();
+
+inline void OrionGLEnable(GLenum cap)
 {
-    glOrthof(
-        (GLfloat)left, (GLfloat)right, (GLfloat)bottom, (GLfloat)top, (GLfloat)zNear,
-        (GLfloat)zFar);
+    if (cap == GL_TEXTURE_2D)
+    {
+        OrionGLSetTextured(true);
+        return;
+    }
+
+    if (cap == GL_LIGHTING)
+    {
+        OrionGLSetLighting(true);
+        return;
+    }
+
+    if (cap == GL_ALPHA_TEST)
+        return;
+
+    glEnable(cap);
 }
+
+inline void OrionGLDisable(GLenum cap)
+{
+    if (cap == GL_TEXTURE_2D)
+    {
+        OrionGLSetTextured(false);
+        return;
+    }
+
+    if (cap == GL_LIGHTING)
+    {
+        OrionGLSetLighting(false);
+        return;
+    }
+
+    if (cap == GL_ALPHA_TEST)
+        return;
+
+    glDisable(cap);
+}
+
+#define glEnable OrionGLEnable
+#define glDisable OrionGLDisable
 
 #endif // ORION_GLES
 //----------------------------------------------------------------------------------

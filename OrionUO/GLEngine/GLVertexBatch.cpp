@@ -17,6 +17,37 @@ CGLVertexBatch g_GLBatch;
 //----------------------------------------------------------------------------------
 float g_GLCurrentColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
 //----------------------------------------------------------------------------------
+#if defined(ORION_GLES)
+// The two pieces of fixed function state the renderer still asks about, kept
+// here because GLES 2.0 removed both. Whether a draw is textured becomes a
+// uniform on the shader; whether it is lit decides if the shader shades it.
+namespace
+{
+bool g_GLTextured = true;
+bool g_GLLighting = false;
+} // namespace
+
+void OrionGLSetTextured(bool textured)
+{
+    g_GLTextured = textured;
+}
+
+bool OrionGLTextured()
+{
+    return g_GLTextured;
+}
+
+void OrionGLSetLighting(bool lighting)
+{
+    g_GLLighting = lighting;
+}
+
+bool OrionGLLightingEnabled()
+{
+    return g_GLLighting;
+}
+#endif
+//----------------------------------------------------------------------------------
 void GLSetColor4f(float r, float g, float b, float a)
 {
     g_GLCurrentColor[0] = r;
@@ -24,7 +55,13 @@ void GLSetColor4f(float r, float g, float b, float a)
     g_GLCurrentColor[2] = b;
     g_GLCurrentColor[3] = a;
 
+#if !defined(ORION_GLES)
+    // Mirrored into GL for the fixed function path, which reads the current
+    // colour rather than a per-vertex one. There is no such state in GLES 2.0:
+    // the tracked value above is the only copy, and the batch feeds it to the
+    // shader as an attribute.
     glColor4f(r, g, b, a);
+#endif
 }
 //----------------------------------------------------------------------------------
 void GLSetColor4ub(unsigned char r, unsigned char g, unsigned char b, unsigned char a)
@@ -176,6 +213,18 @@ void CGLVertexBatch::End()
         return;
     }
 
+#if defined(ORION_GLES)
+    // There is no fixed function path to fall back to: if the shader is gone,
+    // nothing can be drawn at all, and silently drawing nothing is worse than
+    // saying so once.
+    static bool complained = false;
+
+    if (!complained)
+    {
+        complained = true;
+        LOG("CGLVertexBatch: no shader available - nothing can be drawn\n");
+    }
+#else
     glEnableClientState(GL_VERTEX_ARRAY);
     glVertexPointer(2, GL_FLOAT, 0, &m_Positions[0]);
 
@@ -222,6 +271,7 @@ void CGLVertexBatch::End()
         glDisableClientState(GL_TEXTURE_COORD_ARRAY);
 
     glDisableClientState(GL_VERTEX_ARRAY);
+#endif // ORION_GLES
 }
 //----------------------------------------------------------------------------------
 //----------------------------------------------------------------------------------
@@ -237,8 +287,17 @@ void CGLVertexBatch::DrawWithShader(int count)
 
     // Lighting is fixed function state, so ask GL whether it is on rather than
     // tracking it separately; the land tile path enables it around its draw.
+#if defined(ORION_GLES)
+    // GL_LIGHTING does not exist to ask about; the land tile path says so itself
+    // through glEnable(GL_LIGHTING), which the compat header turns into this.
+    const bool lit = OrionGLLightingEnabled() && m_Normaled &&
+                     (int)(m_Normals.size() / 3) == count;
+#else
+    // Lighting is fixed function state, so ask GL whether it is on rather than
+    // tracking it separately; the land tile path enables it around its draw.
     const bool lit = (glIsEnabled(GL_LIGHTING) == GL_TRUE) && m_Normaled &&
                      (int)(m_Normals.size() / 3) == count;
+#endif
 
     const int floatsPerVertex = 11; // position.xy, texcoord.uv, colour.rgba, normal.xyz
     m_Interleaved.clear();

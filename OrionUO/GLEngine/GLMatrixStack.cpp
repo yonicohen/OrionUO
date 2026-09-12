@@ -56,8 +56,12 @@ void CGLMatrixStack::LoadIdentity()
 
     if (m_ForwardToGL)
     {
+        #if !defined(ORION_GLES)
         glMatrixMode(GL_MODELVIEW);
+        #endif
+        #if !defined(ORION_GLES)
         glLoadIdentity();
+        #endif
     }
 }
 //----------------------------------------------------------------------------------
@@ -74,8 +78,12 @@ void CGLMatrixStack::Scale(float x, float y, float z)
 
     if (m_ForwardToGL)
     {
+        #if !defined(ORION_GLES)
         glMatrixMode(GL_MODELVIEW);
+        #endif
+        #if !defined(ORION_GLES)
         glScalef(x, y, z);
+        #endif
     }
 }
 //----------------------------------------------------------------------------------
@@ -85,8 +93,12 @@ void CGLMatrixStack::Push()
 
     if (m_ForwardToGL)
     {
+        #if !defined(ORION_GLES)
         glMatrixMode(GL_MODELVIEW);
+        #endif
+        #if !defined(ORION_GLES)
         glPushMatrix();
+        #endif
     }
 }
 //----------------------------------------------------------------------------------
@@ -103,8 +115,12 @@ void CGLMatrixStack::Pop()
 
     if (m_ForwardToGL)
     {
+        #if !defined(ORION_GLES)
         glMatrixMode(GL_MODELVIEW);
+        #endif
+        #if !defined(ORION_GLES)
         glPopMatrix();
+        #endif
     }
 }
 //----------------------------------------------------------------------------------
@@ -121,8 +137,12 @@ void CGLMatrixStack::Translate(float x, float y, float z)
 
     if (m_ForwardToGL)
     {
+        #if !defined(ORION_GLES)
         glMatrixMode(GL_MODELVIEW);
+        #endif
+        #if !defined(ORION_GLES)
         glTranslatef(x, y, z);
+        #endif
     }
 }
 //----------------------------------------------------------------------------------
@@ -158,8 +178,12 @@ void CGLMatrixStack::Rotate(float degrees, float x, float y, float z)
 
     if (m_ForwardToGL)
     {
+        #if !defined(ORION_GLES)
         glMatrixMode(GL_MODELVIEW);
+        #endif
+        #if !defined(ORION_GLES)
         glRotatef(degrees, x, y, z);
+        #endif
     }
 }
 //----------------------------------------------------------------------------------
@@ -185,10 +209,18 @@ void CGLMatrixStack::Ortho(
 
     if (m_ForwardToGL)
     {
+        #if !defined(ORION_GLES)
         glMatrixMode(GL_PROJECTION);
+        #endif
+        #if !defined(ORION_GLES)
         glLoadIdentity();
+        #endif
+        #if !defined(ORION_GLES)
         glOrtho(left, right, bottom, top, nearZ, farZ);
+        #endif
+        #if !defined(ORION_GLES)
         glMatrixMode(GL_MODELVIEW);
+        #endif
     }
 }
 //----------------------------------------------------------------------------------

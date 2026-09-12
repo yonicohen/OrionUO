@@ -266,13 +266,13 @@ bool CWindow::Create(
     // The renderer is fixed-function GL 2.x (it even uses display lists), so ask
     // for the legacy/compatibility profile rather than core.
 #if defined(ORION_GLES)
-    // Android has no desktop GL. Ask for a GLES 1.1 context specifically: SDL
-    // defaults to loading libGLESv2, which cannot give us the fixed function
-    // pipeline the renderer is built on, and window creation then fails with
-    // 'Could not initialize OpenGL / GLES library'.
+    // Android has no desktop GL. The renderer draws through a shader and a
+    // software matrix stack, so it asks for the shading pipeline: 1.1 was what
+    // the fixed function port needed, and calling a GLES 2 entry point inside a
+    // 1.1 context is a crash rather than an error.
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
 #else
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
 #endif

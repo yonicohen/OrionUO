@@ -55,6 +55,21 @@ private:
 
     bool m_Available = false;
 
+    // What is already set on the GL side. The client draws one sprite per batch,
+    // so anything re-sent per draw is re-sent thousands of times a frame: on a
+    // tile based mobile GPU that alone was the difference between smooth and
+    // unusable. Everything here is skipped when it has not changed.
+    bool m_StateBound = false;
+    float m_LastTransform[16] = {};
+    bool m_HaveLastTransform = false;
+    int m_LastTextured = -1;
+    int m_LastLighting = -1;
+    float m_LastSourceSize[2] = { -1.0f, -1.0f };
+    GLsizei m_LastStride = 0;
+    const float *m_LastVertices = nullptr;
+
+    void BindState(const float *vertices, GLsizei stride, int vertexCount);
+
     static GLuint CompileStage(GLenum type, const char *source);
 
 public:
@@ -67,6 +82,10 @@ public:
     void Free();
 
     bool Available() const { return m_Available; }
+
+    // Forgets what it believes GL is set to. Called when anything outside this
+    // class may have changed the program, the buffer or the attribute arrays.
+    void InvalidateState();
 
     // Source texture dimensions, for filtering magnified art in texel space.
     void SetSourceSize(int width, int height)

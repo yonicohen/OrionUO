@@ -13,11 +13,11 @@
 // Android has no desktop GL and no GLEW: GLES needs no extension loader, since
 // the core entry points are exported directly by libGLESv1_CM. GLCompat.h fills
 // in what the renderer still calls that GLES does not have.
-#include <GLES/gl.h>
+#include <GLES2/gl2.h>
 // Without this glext.h declares the extension enums but not their entry points,
 // so glBindFramebufferOES and friends come out as undeclared identifiers.
 #define GL_GLEXT_PROTOTYPES 1
-#include <GLES/glext.h>
+#include <GLES2/gl2ext.h>
 #else
 #include <GL/glew.h>
 #if defined(ORION_OSX)

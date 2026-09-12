@@ -134,7 +134,7 @@ lib="$outdir/libmain.so"
 echo "linking $lib"
 if ! "$cxx" -shared -o "$lib" "$objdir"/*.o \
     -L"$prefix/lib" -lSDL2 -lSDL2_mixer \
-    -lGLESv1_CM -lEGL -lz -llog -landroid 2>"$outdir/link.err"; then
+    -lGLESv2 -lEGL -lz -llog -landroid 2>"$outdir/link.err"; then
     echo "link failed:" >&2
     head -30 "$outdir/link.err" >&2
     exit 1
@@ -142,11 +142,11 @@ fi
 
 # Everything libmain.so still needs must come from something it links against,
 # or it builds here and fails to load on the device.
-syslib="$(dirname "$(find "$tc/sysroot/usr/lib/$abi" -name libGLESv1_CM.so | sort | tail -1)")"
+syslib="$(dirname "$(find "$tc/sysroot/usr/lib/$abi" -name libGLESv2.so | sort | tail -1)")"
 provided="$outdir/provided.txt"
 : > "$provided"
 for dep in "$prefix/lib/libSDL2.so" "$prefix/lib/libSDL2_mixer.so" \
-           "$syslib"/lib{GLESv1_CM,EGL,z,log,android,m,dl,c}.so \
+           "$syslib"/lib{GLESv2,EGL,z,log,android,m,dl,c}.so \
            "$tc/sysroot/usr/lib/$abi/libc++_shared.so"; do
     [[ -f "$dep" ]] && "$tc/bin/llvm-nm" -D --defined-only "$dep" 2>/dev/null |
         awk '{print $NF}' | sed 's/@.*//' >> "$provided"
