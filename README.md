@@ -18,11 +18,9 @@ Verified working against a live Sphere 0.56b shard: login, character creation,
 world rendering, movement, sound, text input, vendors and gump interaction.
 
 > **Just want to play?** Don't build anything. Grab the archive for your
-> platform from the [releases page](https://github.com/yonicohen/OrionUO/releases)
-> and run `./setup.sh` (`setup.cmd` on Windows): it asks where your Ultima
-> Online folder is and then starts the client on Ignis UO.
-> [IGNIS_UO.md](IGNIS_UO.md) has the details, troubleshooting and
-> controls.
+> platform from the [releases page](https://github.com/yonicohen/OrionUO/releases),
+> unpack it next to a UO installation you already have, and point the client at
+> your shard with `-login`. See [Running](#running) for the details.
 
 ---
 
@@ -112,14 +110,8 @@ EA/Broadsword copyright. The client reads the `.mul` / `.uop` files from an
 install you already have: your shard's download, or the free Classic Client
 from <https://uo.com/client-download/>.
 
-The release archives do this for you. `packaging/setup.sh` (shipped in each
-archive as `setup.sh`) symlinks the data into a `data/` directory beside the
-binary, writes `uo_debug.cfg`, generates a `Client.cuo` if the install has none,
-and launches the client. Nothing is written into your UO folder. The shard it
-connects to lives in `packaging/shard.conf`, and `packaging/play-ignis.sh`
-turns that into the client's `-login` argument.
-
-What follows is the manual equivalent, for a build tree.
+Nothing is ever written into your UO folder. The steps below apply equally to a
+release archive and to a build tree.
 
 ### 1. Point it at your UO data
 
@@ -262,13 +254,11 @@ means nothing. They are dead code worth deleting for tidiness, not a gap.
 
 ## Download
 
-[Releases](https://github.com/yonicohen/OrionUO/releases) carries two archives
+[Releases](https://github.com/yonicohen/OrionUO/releases) carries one archive
 per platform:
 
-* `ignis-uo-*` — the client set up to play [Ignis UO](https://uo.jmaul.co.uk).
-  Unpack it, run `./setup.sh` (`setup.cmd` on Windows), point it at your Ultima
-  Online folder, and it starts. See [IGNIS_UO.md](IGNIS_UO.md).
 * `orionuo-*` — the client on its own, for a shard you configure yourself.
+* `orionuo-android-arm64.apk` — the Android build; see `docs/ANDROID.md`.
 
 Upstream's [Orion Launcher](http://orionuo.online/Launcher.html) is Windows only
 and does not know about this fork's builds.
